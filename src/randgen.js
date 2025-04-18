@@ -11,20 +11,21 @@ class SeededRandom {
   constructor() {
     this.N = 624;
     this.M = 397;
-    this.MATRIX_A = 0x9908b0df;
-    this.UPPER_MASK = 0x80000000;
-    this.LOWER_MASK = 0x7fffffff;
+    this.MATRIX_A = 0x99_08_b0_df;
+    this.UPPER_MASK = 0x80_00_00_00;
+    this.LOWER_MASK = 0x7f_ff_ff_ff;
     this.mt = new Array(this.N);
     this.mti = this.N + 1;
     this.seed(new Date().getTime());
   }
 
   shuffle(arr) { 
-    let newArray = arr.slice(),
-      len = newArray.length,
-      i = len;
+    const newArray = arr.slice();
+    const len = newArray.length;
+    let i = len;
     while (i--) {
-      let p = Math.floor(this.random(len)), t = newArray[i];
+      const p = Math.floor(this.random(len));
+      const t = newArray[i];
       newArray[i] = newArray[p];
       newArray[p] = t;
     }
@@ -33,7 +34,7 @@ class SeededRandom {
 
   randomOrdering(arg) {
     if (!(Array.isArray(arg) || Util.isNum(arg))) throw Error('Expects [] or int');
-    let o = Array.isArray(arg) ? arg : Array.from(Array(arg).keys());
+    const o = Array.isArray(arg) ? arg : Array.from(Array(arg).keys());
     for (let j, x, i = o.length; i; j = Math.floor(this.random() * i),
       x = o[--i], o[i] = o[j], o[j] = x) { /* shuffle */ }
     return o;
@@ -42,9 +43,9 @@ class SeededRandom {
   seed(num) {
     this.mt[0] = num >>> 0;
     for (this.mti = 1; this.mti < this.N; this.mti++) {
-      let s = this.mt[this.mti - 1] ^ (this.mt[this.mti - 1] >>> 30);
-      this.mt[this.mti] = (((((s & 0xffff0000) >>> 16) * 1812433253) << 16) +
-        (s & 0x0000ffff) * 1812433253) + this.mti;
+      const s = this.mt[this.mti - 1] ^ (this.mt[this.mti - 1] >>> 30);
+      this.mt[this.mti] = (((((s & 0xff_ff_00_00) >>> 16) * 1_812_433_253) << 16) +
+        (s & 0x00_00_ff_ff) * 1_812_433_253) + this.mti;
       this.mt[this.mti] >>>= 0;
     }
   }
@@ -55,7 +56,8 @@ class SeededRandom {
   */
   pselect(probs) {
     if (!probs || !probs.length) throw Error('arg required');
-    let point = this._rndf(), cutoff = 0;
+    const point = this._rndf();
+    let cutoff = 0;
     for (let i = 0; i < probs.length - 1; ++i) {
       cutoff += probs[i];
       if (point < cutoff) return i;
@@ -69,7 +71,7 @@ class SeededRandom {
    * TODO: test (more general version)
    */
   pselect2(weights) {
-    let sum = weights.reduce((acc, ele) => acc + ele, 0);
+    const sum = weights.reduce((acc, ele) => acc + ele, 0);
     let rand = Math.random() * sum; // from 0 - sum
     return weights.find(ele => (rand -= ele) < 0);
   }
@@ -82,20 +84,21 @@ class SeededRandom {
     Higher values tend to even out all the probabilities
   */
   ndist(weights, temp) {
-    let probs = [], sum = 0;
-    if (!temp) { // no temp here
+    const probs = [];
+    let sum = 0;
+    if (temp) { // have temp, do softmax
+      if (temp < 0.01) temp = 0.01;
+      for (let i = 0; i < weights.length; i++) {
+        const pr = Math.exp(weights[i] / temp);
+        sum += pr;
+        probs.push(pr);
+      }
+    }
+    else { // no temp here
       for (let i = 0; i < weights.length; i++) {
         if (weights[i] < 0) throw Error('Weights must be positive');
         sum += weights[i];
         probs.push(weights[i]);
-      }
-    }
-    else { // have temp, do softmax
-      if (temp < 0.01) temp = 0.01;
-      for (let i = 0; i < weights.length; i++) {
-        let pr = Math.exp(weights[i] / temp);
-        sum += pr;
-        probs.push(pr);
       }
     }
     return probs.map(p => p /= sum);
@@ -110,10 +113,10 @@ class SeededRandom {
     random(arr, func) -> item from arr, map => func
   */
   random() {
-    let crand = this._rndf();
+    const crand = this._rndf();
     if (!arguments.length) return crand;
     if (Array.isArray(arguments[0])) {
-      let arr = arguments[0];
+      const arr = arguments[0];
       return arr[Math.floor(crand * arr.length)];
     }
     return arguments.length === 1 ? crand * arguments[0] :
@@ -134,7 +137,9 @@ class SeededRandom {
   // ////////////////////////////////////////////////////////////////////////////////////
 
   _rndi() { // int between 0 and max value
-    let y, kk, mag01 = new Array(0x0, this.MATRIX_A);
+    let y;
+    let kk;
+    const mag01 = new Array(0x0, this.MATRIX_A);
     if (this.mti >= this.N) {
       if (this.mti == this.N + 1) this.seed(5489);
       for (kk = 0; kk < this.N - this.M; kk++) {
@@ -151,14 +156,14 @@ class SeededRandom {
     }
     y = this.mt[this.mti++];
     y ^= (y >>> 11);
-    y ^= (y << 7) & 0x9d2c5680;
-    y ^= (y << 15) & 0xefc60000;
+    y ^= (y << 7) & 0x9d_2c_56_80;
+    y ^= (y << 15) & 0xef_c6_00_00;
     y ^= (y >>> 18);
     return y >>> 0;
   }
 
   _rndf() { // float between 0 and 1
-    return this._rndi() * (1.0 / 4294967296.0);
+    return this._rndi() * (1.0 / 4_294_967_296.0);
   }
 
 }

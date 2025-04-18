@@ -9,18 +9,20 @@ class Util {
   // delimited with dashes, with spaces between syllables
   static syllablesToPhones(syllables) {
 
-    let i, j, ret = [];
+    let i;
+    let j;
+    const ret = [];
     for (i = 0; i < syllables.length; i++) {
 
-      let syl = syllables[i],
-        stress = syl[0][0],
-        onset = syl[1],
-        nucleus = syl[2],
-        coda = syl[3];
+      const syl = syllables[i];
+      const stress = syl[0][0];
+      const onset = syl[1];
+      const nucleus = syl[2];
+      const coda = syl[3];
 
       if (stress && nucleus.length) nucleus[0] += stress;
 
-      let data = [];
+      const data = [];
       for (j = 0; j < onset.length; j++) data.push(onset[j]);
       for (j = 0; j < nucleus.length; j++) data.push(nucleus[j]);
       for (j = 0; j < coda.length; j++) data.push(coda[j]);
@@ -38,27 +40,30 @@ class Util {
 
     if (!input || !input.length) return '';
 
-    let dbug, internuclei = [];
-    let syllables = []; // returned data structure
-    let sylls = typeof input == 'string' ? input.split('-') : input;
+    let dbug;
+    let internuclei = [];
+    const syllables = []; // returned data structure
+    const sylls = typeof input == 'string' ? input.split('-') : input;
 
     for (let i = 0; i < sylls.length; i++) {
 
-      let phoneme = sylls[i].trim(), stress;
+      let phoneme = sylls[i].trim();
+      let stress;
       if (!phoneme.length) continue;
 
-      let last = phoneme.charAt(phoneme.length - 1);
+      const last = phoneme.charAt(phoneme.length - 1);
       if (this.isNum(last)) {
         stress = last;
         phoneme = phoneme.substring(0, phoneme.length - 1);
       }
 
-      if (dbug) console.log(i + ")" + phoneme + ' stress=' + stress + ' inter=' + internuclei.join(':'));
+      if (dbug) console.log(`${i})${phoneme} stress=${stress} inter=${internuclei.join(':')}`);
 
       if (Util.Phones.vowels.includes(phoneme)) {
 
         // Split the consonants seen since the last nucleus into coda and onset.
-        let coda, onset;
+        let coda;
+        let onset;
 
         // Make the largest onset we can. The 'split' variable marks the break point.
         for (let split = 0; split < internuclei.length + 1; split++) {
@@ -66,16 +71,16 @@ class Util {
           coda = internuclei.slice(0, split);
           onset = internuclei.slice(split, internuclei.length);
 
-          if (dbug) console.log('  ' + split + ') onset=' + onset.join(':') +
+          if (dbug) console.log(`  ${split}) onset=${onset.join(':')}` +
             '  coda=' + coda.join(':') + '  inter=' + internuclei.join(':'));
 
           // If we are looking at a valid onset, or if we're at the start of the word
           // (in which case an invalid onset is better than a coda that doesn't follow
           // a nucleus), or if we've gone through all of the onsets and we didn't find
           // any that are valid, then split the nonvowels we've seen at this location.
-          let bool = Util.Phones.onsets.includes(onset.join(" "));
+          const bool = Util.Phones.onsets.includes(onset.join(" "));
           if (bool || syllables.length === 0 || onset.length === 0) {
-            if (dbug) console.log('  break ' + phoneme);
+            if (dbug) console.log(`  break ${phoneme}`);
             break;
           }
         }
@@ -84,19 +89,19 @@ class Util {
         // Can't do it if this is the first syllable.
         if (syllables.length > 0) {
           extend(syllables[syllables.length - 1][3], coda);
-          if (dbug) console.log('  tack: ' + coda + ' -> len=' +
+          if (dbug) console.log(`  tack: ${coda} -> len=` +
             syllables[syllables.length - 1][3].length + " [" +
             syllables[syllables.length - 1][3] + "]");
         }
 
         // Make a new syllable out of the onset and nucleus.
-        let toPush = [[stress], onset, [phoneme], []];
+        const toPush = [[stress], onset, [phoneme], []];
         syllables.push(toPush);
 
         // At this point we've processed the internuclei list.
         internuclei = [];
       } else if (!(Util.Phones.consonants.includes(phoneme)) && phoneme != ' ') {
-        throw Error('Invalid phoneme: ' + phoneme);
+        throw Error(`Invalid phoneme: ${phoneme}`);
       } else { // a consonant
         internuclei.push(phoneme);
       }
@@ -152,7 +157,7 @@ class RE {
   }
 
   toString() {
-    return '/' + this.raw + '/';
+    return `/${this.raw}/`;
   }
 }
 

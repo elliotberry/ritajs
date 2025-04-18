@@ -26,8 +26,7 @@ describe("Analyzer", function() {
     RiTa.SILENCE_LTS = tmp;
   });
   it("Should call analyzeWord with lts", function() {
-    if (!hasLex)
-      this.skip();
+    if (!hasLex) this.skip();
     let tmp = RiTa.SILENCE_LTS;
     RiTa.SILENCE_LTS = true;
     let data = RiTa.analyzer.analyzeWord("1903");
@@ -58,8 +57,7 @@ describe("Analyzer", function() {
     feats = RiTa.analyze("chevrolet");
     expect(feats.tokens).eq("chevrolet");
     expect(feats.syllables).eq(hasLex ? "sh-eh-v/r-ow/l-ey" : "ch-eh-v/r-ow/l-ah-t");
-    if (!hasLex)
-      return;
+    if (!hasLex) return;
     let tmp = RiTa.SILENCE_LTS;
     RiTa.SILENCE_LTS = true;
     feats = RiTa.analyze("1903");
@@ -211,8 +209,7 @@ describe("Analyzer", function() {
     for (let i = 0; i < pool2B.length; i++) {
       const feats = RiTa.analyze(pool2B[i]);
       eq(feats.pos, feats2B[i].pos, "[pos]fail at " + pool2B[i]);
-      if (["de-emphasize", "re-apply", "u-turn", "x-ray"].includes(pool2B[i]))
-        continue;
+      if (["de-emphasize", "re-apply", "u-turn", "x-ray"].includes(pool2B[i])) continue;
       eq(feats.tokens, feats2B[i].tokens, "[tokens]fail at " + pool2B[i]);
       eq(feats.phones, feats2B[i].phones, "[phones]fail at " + pool2B[i]);
       eq(feats.stresses, feats2B[i].stresses, "[stresses]fail at " + pool2B[i]);
@@ -270,8 +267,7 @@ describe("Analyzer", function() {
     let result, answer, word;
     eq(RiTa.stresses(""), "");
     eq(RiTa.stresses("women"), "1/0", "women");
-    if (!hasLex)
-      return;
+    if (!hasLex) return;
     eq(RiTa.stresses("The emperor had no clothes on"), "0 1/0/0 1 1 1 1");
     eq(RiTa.stresses("The emperor had no clothes on."), "0 1/0/0 1 1 1 1 .");
     eq(RiTa.stresses("The emperor had no clothes on. The King is fat."), "0 1/0/0 1 1 1 1 . 0 1 1 1 .");
@@ -316,8 +312,7 @@ describe("Analyzer", function() {
     eq(RiTa.phones("chevrolet"), hasLex ? "sh-eh-v-r-ow-l-ey" : "ch-eh-v-r-ow-l-ah-t");
     eq(RiTa.phones("women"), hasLex ? "w-ih-m-eh-n" : "w-ow-m-eh-n");
     eq(RiTa.phones("genuine"), hasLex ? "jh-eh-n-y-uw-w-ah-n" : "jh-eh-n-y-ah-ay-n");
-    if (!hasLex)
-      return;
+    if (!hasLex) return;
     expect(RiTa.phones("deforestations")).eq("d-ih-f-ao-r-ih-s-t-ey-sh-ah-n-z");
     expect(RiTa.phones("schizophrenias")).eq("s-k-ih-t-s-ah-f-r-iy-n-iy-ah-z");
     RiTa.SILENCE_LTS = silent;
@@ -349,8 +344,7 @@ describe("Analyzer", function() {
     eq(RiTa.phones("chevrolet", opts), hasLex ? "sh-eh-v-r-ow-l-ey" : "ch-eh-v-r-ow-l-ah-t");
     eq(RiTa.phones("women", opts), hasLex ? "w-ih-m-eh-n" : "w-ow-m-eh-n");
     eq(RiTa.phones("genuine", opts), hasLex ? "jh-eh-n-y-uw-w-ah-n" : "jh-eh-n-y-ah-ay-n");
-    if (!hasLex)
-      return;
+    if (!hasLex) return;
     expect(RiTa.phones("deforestations", opts)).eq("d-ih-f-ao-r-ih-s-t-ey-sh-ah-n-z");
     expect(RiTa.phones("schizophrenias", opts)).eq("s-k-ih-t-s-ah-f-r-iy-n-iy-ah-z");
     RiTa.SILENCE_LTS = silent;
@@ -401,8 +395,7 @@ describe("Analyzer", function() {
     let tests = ["tidings", "schnapps", "canvases", "censuses", "bonuses", "isthmuses", "thermoses", "circuses", "tongs", "emeriti"];
     tests.forEach((t, i) => {
       let res = RiTa.pluralize(t, { dbug: 0 });
-      if (res !== t)
-        console.error(i + ") Fail: " + t + " -> " + res);
+      if (res !== t) console.error(i + ") Fail: " + t + " -> " + res);
       expect(RiTa.pluralize(t)).eq(t);
     });
   });
@@ -410,19 +403,16 @@ describe("Analyzer", function() {
     let tests = ["tidings", "schnapps", "canvases", "censuses", "bonuses", "isthmuses", "thermoses", "circuses", "tongs", "emeriti"];
     tests.forEach((t, i) => {
       let res = RiTa.inflector.isPlural(t, { dbug: 0 });
-      if (!res)
-        console.error(i + ") Fail: " + t + " -> " + res);
+      if (!res) console.error(i + ") Fail: " + t + " -> " + res);
       expect(res).is.true;
     });
   });
   it("Should handle singular nouns in Tagger.allTags", function() {
-    if (!hasLex)
-      this.skip();
+    if (!hasLex) this.skip();
     let tests = ["tiding", "census", "bonus", "thermos", "circus"];
     tests.forEach((t, i) => {
       let res = RiTa.tagger.allTags(t, false);
-      if (!res.includes("nn"))
-        console.error(i + ") Fail: " + t + " -> " + JSON.stringify(res));
+      if (!res.includes("nn")) console.error(i + ") Fail: " + t + " -> " + JSON.stringify(res));
       expect(res.includes("nn")).to.be.true;
     });
   });
@@ -889,8 +879,7 @@ describe("Analyzer", function() {
     expect(RiTa.analyzer.computePhones("leo", { silent: true })).eql(["l", "iy", "ow"]);
     expect(RiTa.analyzer.computePhones("student's")).eql(["s", "t", "uw1", "d", "eh1", "n", "t", "z"]);
     expect(RiTa.analyzer.computePhones("-1", { silent: true })).eql(void 0);
-    if (!hasLex)
-      return;
+    if (!hasLex) return;
     expect(RiTa.analyzer.computePhones("1")).eql(["w", "ah", "n"]);
     expect(RiTa.analyzer.computePhones("50")).eql(["f", "ay", "v", "z", "ih", "r", "ow"]);
   });

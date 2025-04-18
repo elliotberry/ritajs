@@ -3,8 +3,7 @@ import { RiTa } from "./index.js";
 describe("Tagger", () => {
   let hasLex = true;
   it("Should call pos.array", function() {
-    if (!hasLex)
-      this.skip();
+    if (!hasLex) this.skip();
     expect(RiTa.pos([])).eql([]);
     expect(RiTa.pos(["deal"])).eql(["nn"]);
     expect(RiTa.pos(["freed"])).eql(["jj"]);

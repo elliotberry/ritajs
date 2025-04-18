@@ -24,7 +24,7 @@ class RegularExpression {
   }
 
   toString() {
-    return '/' + this.raw + '/';
+    return `/${this.raw}/`;
   }
 }
 
@@ -39,7 +39,7 @@ class Conjugator {
   constructor(parent) {
     this.RiTa = parent;
     this._reset();
-    let data = this.RiTa.lexicon.data;
+    const data = this.RiTa.lexicon.data;
     this.allVerbs = Object.keys(data).filter(word => data[word][1].split(' ').includes('vb'));
     this.verbsEndingInE = this.allVerbs.filter(v => v.endsWith("e"));
     this.verbsEndingInDouble = this.allVerbs.filter(v => /([^])\1$/.test(v));
@@ -62,7 +62,10 @@ class Conjugator {
     // handle 'to be' verbs and stemming
     let frontVG = TO_BE.includes(verb) ? "be" : this._handleStem(verb);
 
-    let actualModal, verbForm, conjs = [], RiTa = this.RiTa;
+    let actualModal;
+    let verbForm;
+    const conjs = [];
+    const RiTa = this.RiTa;
 
     if (this.form === RiTa.INFINITIVE) {
       actualModal = "to";
@@ -102,38 +105,38 @@ class Conjugator {
     // add modal, and we're done
     actualModal && conjs.push(actualModal);
 
-    return conjs.reduce((acc, cur) => cur + ' ' + acc).trim();
+    return conjs.reduce((acc, cur) => `${cur} ${acc}`).trim();
   }
 
   unconjugate(word, opts = {}) { // NAPI (perhaps should be added?)  
 
     if (typeof word !== 'string') return;
 
-    let dbug = opts && opts.dbug;
+    const dbug = opts && opts.dbug;
 
     if (IRREG_VERBS_LEX.hasOwnProperty(word)) {
-      dbug && console.log(word + " in exceptions1 (in lex)");
+      dbug && console.log(`${word} in exceptions1 (in lex)`);
       return IRREG_VERBS_LEX[word];
     }
     else if (Object.values(IRREG_VERBS_LEX).includes(word)) {
-      dbug && console.log(word + " is base form in exceptions1 (in lex)");
+      dbug && console.log(`${word} is base form in exceptions1 (in lex)`);
       return word;
     }
 
     if (IRREG_VERBS_NOLEX.hasOwnProperty(word)) {
-      dbug && console.log(word + " is in exceptions2");
+      dbug && console.log(`${word} is in exceptions2`);
       return IRREG_VERBS_NOLEX[word];
     }
     else if (Object.values(IRREG_VERBS_NOLEX).includes(word)) {
-      dbug && console.log(word + " is base form in exceptions2 (not in lex)");
+      dbug && console.log(`${word} is base form in exceptions2 (not in lex)`);
       return word;
     }
 
-    let tags = this.RiTa.tagger.allTags(word, { noGuessing: true });
+    const tags = this.RiTa.tagger.allTags(word, { noGuessing: true });
 
     // if its already a base form verb, return it
     if (tags.some(t => t === 'vb')) {
-      dbug && console.log(word + " is a base form verb");
+      dbug && console.log(`${word} is a base form verb`);
       return word;
     }
 
@@ -143,14 +146,14 @@ class Conjugator {
     if (word.endsWith("s")) {
 
       if (word.endsWith("ies")) {
-        dbug && console.log("'" + word + "' hit rule: ends with -ies");
-        return word.slice(0, -3) + "y";
+        dbug && console.log(`'${word}' hit rule: ends with -ies`);
+        return `${word.slice(0, -3)}y`;
       }
       else if (/(ch|s|sh|x|z|o)es$/.test(word)) {
-        dbug && console.log("'" + word + "' hit rule: ends with -(ch|s|sh|x|z|o)es");
+        dbug && console.log(`'${word}' hit rule: ends with -(ch|s|sh|x|z|o)es`);
         return word.slice(0, -2);
       }
-      dbug && console.log("'" + word + "' hit rule: ends with -s");
+      dbug && console.log(`'${word}' hit rule: ends with -s`);
       return word.slice(0, -1);
     }
 
@@ -158,24 +161,24 @@ class Conjugator {
     else if (word.endsWith("ed")) {
 
       if (word.endsWith("ied")) {
-        dbug && console.log("'" + word + "' hit rule: ends with -ied");
-        return word.slice(0, -3) + "y";
+        dbug && console.log(`'${word}' hit rule: ends with -ied`);
+        return `${word.slice(0, -3)}y`;
       }
       else if (/([a-z])\1ed$/.test(word)) {
         if (this.verbsEndingInDouble.includes(word.replace(/ed$/, ""))) {
-          dbug && console.log("'" + word + "' hit rule: ends with -ed");
+          dbug && console.log(`'${word}' hit rule: ends with -ed`);
           return word.slice(0, -2);
         }
-        dbug && console.log("'" + word + "' hit rule: ends with -..ed");
+        dbug && console.log(`'${word}' hit rule: ends with -..ed`);
         return word.slice(0, -3);
       }
       else if (word.endsWith("ed")) {
         if (this.verbsEndingInE.includes(word.replace(/d$/, ""))) {
-          dbug && console.log("'" + word + "' hit rule: ends with -(e)d");
+          dbug && console.log(`'${word}' hit rule: ends with -(e)d`);
           return word.slice(0, -1);
         }
         else {
-          dbug && console.log("'" + word + "' hit rule: ends with -ed");
+          dbug && console.log(`'${word}' hit rule: ends with -ed`);
           return word.slice(0, -2);
         }
       }
@@ -186,27 +189,25 @@ class Conjugator {
 
       if (/([a-z])\1ing$/.test(word)) {
         if (this.verbsEndingInDouble.includes(word.slice(0, -3))) {
-          dbug && console.log("'" + word + "' hit rule: ends with -(XX)ing [in-list]");
+          dbug && console.log(`'${word}' hit rule: ends with -(XX)ing [in-list]`);
           return word.slice(0, -3);
         }
 
-        dbug && console.log("'" + word + "' hit rule: ends with -XXing [no-list]");
+        dbug && console.log(`'${word}' hit rule: ends with -XXing [no-list]`);
         return word.slice(0, -4);
       }
 
-      if (word.endsWith('ying')) {
-        if (this.verbsEndingInE.includes(word.replace(/ying$/, "ie"))) {
-          dbug && console.log("'" + word + "' hit rule: base ends with -ying");
-          return word.slice(0, -4) + "ie";
-        }
+      if (word.endsWith('ying') && this.verbsEndingInE.includes(word.replace(/ying$/, "ie"))) {
+        dbug && console.log(`'${word}' hit rule: base ends with -ying`);
+        return `${word.slice(0, -4)}ie`;
       }
 
       if (this.verbsEndingInE.includes(word.replace(/ing$/, "e"))) {
-        dbug && console.log("'" + word + "' hit rule: base ends with -(e)ing");
-        return word.slice(0, -3) + "e";
+        dbug && console.log(`'${word}' hit rule: base ends with -(e)ing`);
+        return `${word.slice(0, -3)}e`;
       }
 
-      dbug && console.log("'" + word + "' hit rule: ends with -ing");
+      dbug && console.log(`'${word}' hit rule: ends with -ing`);
 
       return word.slice(0, -3);
     }
@@ -215,12 +216,12 @@ class Conjugator {
 
       // if it hasn't matched anything AND is not a verb in lex, give up
       if (!tags.some(t => t.startsWith('vb'))) {
-        dbug && console.log(word + " is not a known verb");
+        dbug && console.log(`${word} is not a known verb`);
         return word;
       }
     }
 
-    dbug && console.log("'" + word + "' hit no rules");
+    dbug && console.log(`'${word}' hit no rules`);
 
     return word;
   }
@@ -236,7 +237,7 @@ class Conjugator {
   }
 
   toString() {
-    return "  ---------------------" + "\n" + "  Passive = " + this.passive +
+    return `  ---------------------\n  Passive = ${this.passive}` +
       '\n' + "  Perfect = " + this.perfect + '\n' + "  Progressive = " +
       this.progressive + '\n' + "  ---------------------" + '\n' + "  Number = " +
       this.number + '\n' + "  Person = " + this.person + '\n' + "  Tense = " +
@@ -263,17 +264,17 @@ class Conjugator {
     const RiTa = this.RiTa;
     if (typeof args === 'string') {
       if (/^[123][SP](Pr|Pa|Fu)$/.test(args)) {
-        let opts = {};
+        const opts = {};
         opts.person = parseInt(args[0]);
         opts.number = args[1] === 'S' ? RiTa.SINGULAR : RiTa.PLURAL;
-        let tense = args.substr(2);
+        const tense = args.substr(2);
         if (tense === 'Pr') opts.tense = RiTa.PRESENT;
         if (tense === 'Fu') opts.tense = RiTa.FUTURE;
         if (tense === 'Pa') opts.tense = RiTa.PAST;
         args = opts;
       }
       else {
-        throw Error('Invalid args: ' + args)
+        throw Error(`Invalid args: ${args}`)
       }
     }
 
@@ -293,17 +294,20 @@ class Conjugator {
 
     theVerb = theVerb.trim();
 
-    let dbug = 0, res, name = ruleSet.name;
-    let rules = ruleSet.rules, defRule = ruleSet.defaultRule;
+    const dbug = 0;
+    let res;
+    const name = ruleSet.name;
+    const rules = ruleSet.rules;
+    const defRule = ruleSet.defaultRule;
 
-    if (!rules) console.error("no rule: " + ruleSet.name + ' of ' + theVerb);
+    if (!rules) console.error(`no rule: ${ruleSet.name} of ${theVerb}`);
     if (MODALS.includes(theVerb)) return theVerb;
 
     for (let i = 0; i < rules.length; i++) {
-      dbug && console.log("checkRules(" + name + ").fire(" + i + ")=" + rules[i].regex);
+      dbug && console.log(`checkRules(${name}).fire(${i})=${rules[i].regex}`);
       if (rules[i].applies(theVerb)) {
-        let got = rules[i].fire(theVerb);
-        dbug && console.log("HIT(" + name + ").fire(" + i + ")=" + rules[i].regex + "_returns: " + got);
+        const got = rules[i].fire(theVerb);
+        dbug && console.log(`HIT(${name}).fire(${i})=${rules[i].regex}_returns: ${got}`);
         return got;
       }
     }
@@ -314,7 +318,7 @@ class Conjugator {
     }
 
     res = defRule.fire(theVerb);
-    dbug && console.log("checkRules(" + name + ").returns: " + res);
+    dbug && console.log(`checkRules(${name}).returns: ${res}`);
 
     return res;
   }
@@ -344,7 +348,7 @@ class Conjugator {
         pos = lex._posArr(w.substring(0, w.length - 3)); // hopped
       }
       if (!pos && w.endsWith("ied")) {
-        pos = lex._posArr(w.substring(0, w.length - 3) + "y"); // cried
+        pos = lex._posArr(`${w.substring(0, w.length - 3)}y`); // cried
       }
       if (pos && pos.includes('vb')) return true;
     }
@@ -362,7 +366,7 @@ class Conjugator {
       if (pos && (pos.includes('vb') || pos.includes("vbd"))) return true;
 
       // special cases
-      let stem = w.substring(0, w.length - 2);
+      const stem = w.substring(0, w.length - 2);
       if (/^(writt|ridd|chidd|swoll)$/.test(stem)) return true;
     }
 
@@ -370,7 +374,7 @@ class Conjugator {
     if (/[ndt]$/.test(w) && Object.keys(IRREG_VERBS_LEX).includes(w)) {
       // grown, thrown, heard, learnt...
       // start, bust...
-      let pos = lex._posArr(w.substring(0, w.length - 1))
+      const pos = lex._posArr(w.substring(0, w.length - 1))
       if (pos && (pos.includes('vb'))) return true;
     }
 
@@ -434,10 +438,10 @@ class Conjugator {
     }
 
     let w = word;
-    let allVerb = this.allVerbs;
+    const allVerb = this.allVerbs;
     while (w.length > 1) {
-      let pattern = new RegExp("^" + w);
-      let guess = allVerb.filter(item => pattern.test(item));
+      const pattern = new RegExp(`^${w}`);
+      const guess = allVerb.filter(item => pattern.test(item));
       if (!guess || guess.length < 1) {
         w = w.slice(0, -1);
         continue;
@@ -475,7 +479,7 @@ const VERBAL_PREFIX = "((be|with|pre|un|over|re|mis|under|out|up|fore|for|counte
 const ANY_STEM_RE = "^((\\w+)(-\\w+)*)(\\s((\\w+)(-\\w+)*))*$";
 
 const ING_FORM_RULES = [
-  RE(CONS + "ie$", 2, "ying", 1),
+  RE(`${CONS}ie$`, 2, "ying", 1),
   RE("[^oie]e$", 1, "ing", 1),
   RE("^trek$", 1, "cking"),
   RE("^bring$", 0, "ing"),
@@ -486,23 +490,23 @@ const ING_FORM_RULES = [
 
 const PAST_PART_RULES = [
 
-  RE(CONS + "y$", 1, "ied", 1),
-  RE("^" + VERBAL_PREFIX + "?(bring)$", 3, "ought"),
-  RE("^" + VERBAL_PREFIX + "?(take|rise|strew|blow|draw|drive|know|give|" + "arise|gnaw|grave|grow|hew|know|mow|see|sew|throw|prove|saw|quartersaw|" + "partake|sake|shake|shew|show|shrive|sightsee|strew|strive)$",
+  RE(`${CONS}y$`, 1, "ied", 1),
+  RE(`^${VERBAL_PREFIX}?(bring)$`, 3, "ought"),
+  RE(`^${VERBAL_PREFIX}?(take|rise|strew|blow|draw|drive|know|give|arise|gnaw|grave|grow|hew|know|mow|see|sew|throw|prove|saw|quartersaw|partake|sake|shake|shew|show|shrive|sightsee|strew|strive)$`,
     0, "n"),
-  RE("^" + VERBAL_PREFIX + "?[gd]o$", 0, "ne", 1),
+  RE(`^${VERBAL_PREFIX}?[gd]o$`, 0, "ne", 1),
   RE("^(beat|eat|be|fall)$", 0, "en"),
   RE("^(have)$", 2, "d"),
-  RE("^" + VERBAL_PREFIX + "?bid$", 0, "den"),
-  RE("^" + VERBAL_PREFIX + "?[lps]ay$", 1, "id", 1),
+  RE(`^${VERBAL_PREFIX}?bid$`, 0, "den"),
+  RE(`^${VERBAL_PREFIX}?[lps]ay$`, 1, "id", 1),
   RE("^behave$", 0, "d"),
-  RE("^" + VERBAL_PREFIX + "?have$", 2, "d", 1),
+  RE(`^${VERBAL_PREFIX}?have$`, 2, "d", 1),
   RE("(sink|slink|drink|shrink|stink)$", 3, "unk"),
   RE("(([sfc][twlp]?r?|w?r)ing|hang)$", 3, "ung"),
-  RE("^" + VERBAL_PREFIX + "?(shear|swear|wear|tear)$", 3, "orn"),
-  RE("^" + VERBAL_PREFIX + "?(bend|spend|send|lend)$", 1, "t"),
-  RE("^" + VERBAL_PREFIX + "?(weep|sleep|sweep|creep|keep$)$", 2, "pt"),
-  RE("^" + VERBAL_PREFIX + "?(sell|tell)$", 3, "old"),
+  RE(`^${VERBAL_PREFIX}?(shear|swear|wear|tear)$`, 3, "orn"),
+  RE(`^${VERBAL_PREFIX}?(bend|spend|send|lend)$`, 1, "t"),
+  RE(`^${VERBAL_PREFIX}?(weep|sleep|sweep|creep|keep$)$`, 2, "pt"),
+  RE(`^${VERBAL_PREFIX}?(sell|tell)$`, 3, "old"),
   RE("^(outfight|beseech)$", 4, "ought"),
   RE("^bear$", 3, "orne"),
   RE("^bethink$", 3, "ought"),
@@ -510,7 +514,7 @@ const PAST_PART_RULES = [
   RE("^aby$", 1, "ought"),
   RE("^tarmac", 0, "ked"),
   RE("^abide$", 3, "ode"),
-  RE("^" + VERBAL_PREFIX + "?(speak|(a?)wake|break)$", 3, "oken"),
+  RE(`^${VERBAL_PREFIX}?(speak|(a?)wake|break)$`, 3, "oken"),
   RE("^backbite$", 1, "ten"),
   RE("^backslide$", 1, "den"),
   RE("^become$", 3, "ame"),
@@ -679,21 +683,21 @@ const PAST_PART_RULES = [
   RE("e$", 0, "d", 1),
 
   // Null past forms
-  RE("^" + VERBAL_PREFIX + "?(cast|thrust|typeset|cut|bid|upset|wet|bet|cut|hit|hurt|inset|let|cost|burst|beat|beset|set|upset|hit|offset|put|quit|" + "wed|typeset|wed|spread|split|slit|read|run|rerun|shut|shed)$", 0)
+  RE(`^${VERBAL_PREFIX}?(cast|thrust|typeset|cut|bid|upset|wet|bet|cut|hit|hurt|inset|let|cost|burst|beat|beset|set|upset|hit|offset|put|quit|wed|typeset|wed|spread|split|slit|read|run|rerun|shut|shed)$`, 0)
 ];
 
 const PAST_RULES = [
   RE("^(reduce)$", 0, "d"),
-  RE("^" + VERBAL_PREFIX + "?[pls]ay$", 1, "id", 1),
-  RE(CONS + "y$", 1, "ied", 1),
+  RE(`^${VERBAL_PREFIX}?[pls]ay$`, 1, "id", 1),
+  RE(`${CONS}y$`, 1, "ied", 1),
   RE("^(fling|cling|hang)$", 3, "ung"),
   RE("(([sfc][twlp]?r?|w?r)ing)$", 3, "ang", 1),
-  RE("^" + VERBAL_PREFIX + "?(bend|spend|send|lend|spend)$", 1, "t"),
-  RE("^" + VERBAL_PREFIX + "?lie$", 2, "ay"),
-  RE("^" + VERBAL_PREFIX + "?(weep|sleep|sweep|creep|keep)$", 2, "pt"),
-  RE("^" + VERBAL_PREFIX + "?(sell|tell)$", 3, "old"),
-  RE("^" + VERBAL_PREFIX + "?do$", 1, "id"),
-  RE("^" + VERBAL_PREFIX + "?dig$", 2, "ug"),
+  RE(`^${VERBAL_PREFIX}?(bend|spend|send|lend|spend)$`, 1, "t"),
+  RE(`^${VERBAL_PREFIX}?lie$`, 2, "ay"),
+  RE(`^${VERBAL_PREFIX}?(weep|sleep|sweep|creep|keep)$`, 2, "pt"),
+  RE(`^${VERBAL_PREFIX}?(sell|tell)$`, 3, "old"),
+  RE(`^${VERBAL_PREFIX}?do$`, 1, "id"),
+  RE(`^${VERBAL_PREFIX}?dig$`, 2, "ug"),
   RE("^behave$", 0, "d"),
   RE("^(have)$", 2, "d"),
   RE("(sink|drink)$", 3, "ank"),
@@ -835,7 +839,7 @@ const PAST_RULES = [
   RE("^overwind$", 3, "ound"),
   RE("^overwrite$", 3, "ote"),
   RE("^partake$", 3, "ook"),
-  RE("^" + VERBAL_PREFIX + "?run$", 2, "an"),
+  RE(`^${VERBAL_PREFIX}?run$`, 2, "an"),
   RE("^ring$", 3, "ang"),
   RE("^rebuild$", 3, "ilt"),
   RE("^red"),
@@ -937,7 +941,7 @@ const PAST_RULES = [
   RE("e$", 0, "d", 1),
 
   // Null past forms
-  RE("^" + VERBAL_PREFIX + "?(cast|thrust|typeset|cut|bid|upset|wet|bet|cut|hit|hurt|inset|" + "let|cost|burst|beat|beset|set|upset|offset|put|quit|wed|typeset|" + "wed|spread|split|slit|read|run|shut|shed|lay)$", 0)
+  RE(`^${VERBAL_PREFIX}?(cast|thrust|typeset|cut|bid|upset|wet|bet|cut|hit|hurt|inset|let|cost|burst|beat|beset|set|upset|offset|put|quit|wed|typeset|wed|spread|split|slit|read|run|shut|shed|lay)$`, 0)
 ];
 
 const PRESENT_RULES = [
@@ -950,7 +954,7 @@ const PRESENT_RULES = [
   RE("^ko$", 0, "'s"),
   RE("[osz]$", 0, "es", 1),
   RE("^have$", 2, "s"),
-  RE(CONS + "y$", 1, "ies", 1),
+  RE(`${CONS}y$`, 1, "ies", 1),
   RE("^be$", 2, "is"),
   RE("([zsx]|ch|sh)$", 0, "es", 1)
 ];

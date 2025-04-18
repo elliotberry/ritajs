@@ -28,7 +28,8 @@ class Tokenizer {
     includePunct: false,
     sort: false,
   }) {
-    let words = this.tokenize(text, options), map = {};
+    const words = this.tokenize(text, options);
+    const map = {};
     words.forEach(w => {
       if (!options.caseSensitive) w = w.toLowerCase();
       if (options.includePunct || ALPHA_RE.test(w)) map[w] = 1;
@@ -53,7 +54,7 @@ class Tokenizer {
     for (let i = 0; i < TOKENIZE_RE.length; i += 2) {
       if (opts.debug) var pre = text;
       text = text.replace(TOKENIZE_RE[i], TOKENIZE_RE[i + 1]);
-      if (opts.debug && text !== pre) console.log('HIT' + i, pre + ' -> '
+      if (opts.debug && text !== pre) console.log(`HIT${i}`, `${pre} -> `
         + text, TOKENIZE_RE[i], TOKENIZE_RE[i + 1]);
 
     }
@@ -71,9 +72,7 @@ class Tokenizer {
       }
     }
 
-    let result = this.popTags(text.trim().split(WS_RE), tags);
-
-    return result;
+    return this.popTags(text.trim().split(WS_RE), tags);
   }
 
   untokenize(arr, delim = ' ') { // very ugly (but works somehow)
@@ -82,33 +81,39 @@ class Tokenizer {
 
     arr = this.preProcessTags(arr);
 
-    let nextNoSpace = false, afterQuote = false, midSentence = false;
+    let nextNoSpace = false;
+    let afterQuote = false;
+    let midSentence = false;
     let withinQuote = arr.length && QUOTE_RE.test(arr[0]);
     let result = arr[0] || '';
 
     for (let i = 1; i < arr.length; i++) {
 
       if (!arr[i]) continue;
-      let thisToken = arr[i];
-      let lastToken = arr[i - 1];
-      let thisComma = thisToken === ',', lastComma = lastToken === ',';
-      let thisNBPunct = NOSP_BF_PUNCT_RE.test(thisToken)
+      const thisToken = arr[i];
+      const lastToken = arr[i - 1];
+      const thisComma = thisToken === ',';
+      const lastComma = lastToken === ',';
+      const thisNBPunct = NOSP_BF_PUNCT_RE.test(thisToken)
         || UNTAG_RE[2].test(thisToken) || LINEBREAK_RE.test(thisToken); // NB -> no space before the punctuation (add closing tag)
-      let thisLBracket = LB_RE.test(thisToken); // LBracket -> left bracket
-      let thisRBracket = RB_RE.test(thisToken); // RBracket -> right bracket
-      let lastNBPunct = NOSP_BF_PUNCT_RE.test(lastToken)
+      const thisLBracket = LB_RE.test(thisToken); // LBracket -> left bracket
+      const thisRBracket = RB_RE.test(thisToken); // RBracket -> right bracket
+      const lastNBPunct = NOSP_BF_PUNCT_RE.test(lastToken)
         || LINEBREAK_RE.test(lastToken); // NB -> no space before
-      let lastNAPunct = NOSP_AF_PUNCT_RE.test(lastToken)
+      const lastNAPunct = NOSP_AF_PUNCT_RE.test(lastToken)
         || UNTAG_RE[1].test(lastToken) || LINEBREAK_RE.test(lastToken); // NA -> no space after (add opening tag)
-      let lastLB = LB_RE.test(lastToken), lastRB = RB_RE.test(lastToken);
-      let lastEndWithS = (lastToken[lastToken.length - 1] === 's' &&
+      const lastLB = LB_RE.test(lastToken);
+      const lastRB = RB_RE.test(lastToken);
+      const lastEndWithS = (lastToken[lastToken.length - 1] === 's' &&
         lastToken != "is" && lastToken != "Is" && lastToken != "IS");
-      let lastIsWWW = WWW_RE.test(lastToken), isDomain = DOMAIN_RE.test(thisToken);
-      let nextIsS = i == arr.length - 1 ? false : (arr[i + 1] === "s"
+      const lastIsWWW = WWW_RE.test(lastToken);
+      const isDomain = DOMAIN_RE.test(thisToken);
+      const nextIsS = i == arr.length - 1 ? false : (arr[i + 1] === "s"
         || arr[i + 1] === "S");
-      let lastQuote = QUOTE_RE.test(lastToken), isLast = (i == arr.length - 1);
-      let thisQuote = QUOTE_RE.test(thisToken);
-      let thisLineBreak = LINEBREAK_RE.test(thisToken);
+      const lastQuote = QUOTE_RE.test(lastToken);
+      const isLast = (i == arr.length - 1);
+      const thisQuote = QUOTE_RE.test(thisToken);
+      const thisLineBreak = LINEBREAK_RE.test(thisToken);
 
       if ((lastToken === "." && isDomain) || nextNoSpace) {
         nextNoSpace = false;
@@ -176,23 +181,23 @@ class Tokenizer {
   sentences(text, regex) {
     if (!text || !text.length) return [text];
 
-    let clean = text.replace(NL_RE, ' ')
+    const clean = text.replace(NL_RE, ' ')
 
-    let delim = '___';
-    let re = new RegExp(delim, 'g');
-    let pattern = regex || this.splitter;
+    const delim = '___';
+    const re = new RegExp(delim, 'g');
+    const pattern = regex || this.splitter;
 
-    let unescapeAbbrevs = (arr) => {
+    const unescapeAbbrevs = (arr) => {
       for (let i = 0; i < arr.length; i++) {
         arr[i] = arr[i].replace(re, ".");
       }
       return arr;
     }
 
-    let escapeAbbrevs = (text) => {
-      let abbrevs = this.RiTa.ABRV;
+    const escapeAbbrevs = (text) => {
+      const abbrevs = this.RiTa.ABRV;
       for (let i = 0; i < abbrevs.length; i++) {
-        let abv = abbrevs[i];
+        const abv = abbrevs[i];
         let idx = text.indexOf(abv);
         while (idx > -1) {
           text = text.replace(abv, abv.replace('.', delim));
@@ -202,16 +207,17 @@ class Tokenizer {
       return text;
     }
 
-    let arr = escapeAbbrevs(clean).match(pattern);
+    const arr = escapeAbbrevs(clean).match(pattern);
     return arr?.length ? unescapeAbbrevs(arr) : [text];
   }
 
 
   pushTags(text) {
-    let tags = [], tagIdx = 0;
+    const tags = [];
+    let tagIdx = 0;
     while (TAG_RE.test(text)) {
       tags.push(text.match(TAG_RE)[0]);
-      text = text.replace(TAG_RE, " _" + TAG + (tagIdx++) + "_ ");
+      text = text.replace(TAG_RE, ` _${TAG}${tagIdx++}_ `);
     }
 
     return { tags, text };
@@ -230,15 +236,16 @@ class Tokenizer {
   }
 
   preProcessTags(array) {
-    let result = [], currentIdx = 0;
+    let result = [];
+    let currentIdx = 0;
     while (currentIdx < array.length) {
-      let currentToken = array[currentIdx];
+      const currentToken = array[currentIdx];
       if (!LT_RE.test(currentToken)) {
         result.push(currentToken);
         currentIdx++;
         continue;
       } // if not '<'
-      let subArray = [array[currentIdx]];
+      const subArray = [array[currentIdx]];
       let inspectIdx = currentIdx + 1;
       while (inspectIdx < array.length) {
         subArray.push(array[inspectIdx]);
@@ -261,7 +268,7 @@ class Tokenizer {
         currentIdx = inspectIdx + 1;
         continue;
       }
-      let tag = this.tagSubarrayToString(subArray);
+      const tag = this.tagSubarrayToString(subArray);
       result.push(tag);
       currentIdx = inspectIdx + 1;
     }
@@ -270,7 +277,7 @@ class Tokenizer {
 
   tagSubarrayToString(array) {
     if (!LT_RE.test(array[0]) || !GT_RE.test(array[array.length - 1])) {
-      throw Error(array + 'is not a tag');
+      throw Error(`${array}is not a tag`);
     }
     let start = array[0].trim();
     let end = array[array.length - 1].trim();
@@ -281,18 +288,17 @@ class Tokenizer {
       inspectIdx++;
     }
 
-    let contentStartIdx = inspectIdx;
+    const contentStartIdx = inspectIdx;
     inspectIdx = array.length - 2;
     while (inspectIdx > contentStartIdx && TAGEND_RE.test(array[inspectIdx])) {
       end = array[inspectIdx].trim() + end;
       inspectIdx--;
     }
 
-    let contentEndIdx = inspectIdx;
-    let result = start + this.untokenize
-      (array.slice(contentStartIdx, contentEndIdx + 1)).trim() + end;
+    const contentEndIdx = inspectIdx;
 
-    return result;
+    return start + this.untokenize
+    (array.slice(contentStartIdx, contentEndIdx + 1)).trim() + end;
   }
 }
 
@@ -309,12 +315,18 @@ const GT_RE = /^ *> *$/;
 const TAGSTART_RE = /^ *[!\-\/] *$/;
 const TAGEND_RE = /^ *[\-\/] *$/
 const NOSP_AF_PUNCT_RE = /^[\^\*\$\/\u2044#\-@\u00b0\u2012\u2013\u2014]+$/;
-const TAG = "TAG", UNDER_RE = /([0-9a-zA-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF]|[\.\,])_([0-9a-zA-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF])/g;
-const LB_RE = /^[\[\(\{\u27e8]+$/, RB_RE = /^[\)\]\}\u27e9]+$/;
+const TAG = "TAG";
+const UNDER_RE = /([0-9a-zA-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF]|[\.\,])_([0-9a-zA-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF])/g;
+const LB_RE = /^[\[\(\{\u27e8]+$/;
+const RB_RE = /^[\)\]\}\u27e9]+$/;
 const QUOTE_RE = /^[""\u201c\u201d\u2019\u2018`''\u00ab\u00bb]+$/;
 const DOMAIN_RE = /^(com|org|edu|net|xyz|gov|int|eu|hk|tw|cn|de|ch|fr)$/;
-const SQUOTE_RE = /^[\u2019\u2018`']+$/, ALPHA_RE = /^[A-Za-z’']+$/, WS_RE = / +/;
-const APOS_RE = /^[\u2019']+$/, NL_RE = /(\r?\n)+/g, WWW_RE = /^(www[0-9]?|WWW[0-9]?)$/;
+const SQUOTE_RE = /^[\u2019\u2018`']+$/;
+const ALPHA_RE = /^[A-Za-z’']+$/;
+const WS_RE = / +/;
+const APOS_RE = /^[\u2019']+$/;
+const NL_RE = /(\r?\n)+/g;
+const WWW_RE = /^(www[0-9]?|WWW[0-9]?)$/;
 const NOSP_BF_PUNCT_RE = /^[,\.\;\:\?\!\)""\u201c\u201d\u2019\u2018`'%\u2026\u2103\^\*\u00b0\/\u2044\u2012\u2013\u2014\-@]+$/;
 const LINEBREAK_RE = /\r?\n/;//[\n\r\036]/;
 const URL_RE = /((http[s]?):(\/\/))?([-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b)([-a-zA-Z0-9()@:%_\+.~#?&\/\/=]*)/;

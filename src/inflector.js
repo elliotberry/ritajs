@@ -23,21 +23,21 @@ class Inflector {
     word = word.trim();
     if (!word.length) return '';
 
-    let check = word.toLowerCase();
+    const check = word.toLowerCase();
     
     if (this.RiTa.lexicon.isMassNoun(check)) {
     //if (this.RiTa.MASS_NOUNS.includes(check)) { // 12/6/23
-      dbug && console.log(word + ' hit MASS_NOUNS');
+      dbug && console.log(`${word} hit MASS_NOUNS`);
       return word;
     }
 
-    let rules = type === SING ? SING_RULES : PLUR_RULES;
+    const rules = type === SING ? SING_RULES : PLUR_RULES;
     for (let i = 0; i < rules.length; i++) {
-      let rule = rules[i];
+      const rule = rules[i];
       if (rule.applies(check)) {
-        dbug && console.log(word + ' (' + (type === SING ? 'singularize' : 'pluralize')
+        dbug && console.log(`${word} (${type === SING ? 'singularize' : 'pluralize'}`
           + ') hit ' + (type === SING ? 'singular' : 'plural')
-          + (i < rules.length - 1 ? ' rule #' + i : ' DEFAULT rule'), rule);
+          + (i < rules.length - 1 ? ` rule #${i}` : ' DEFAULT rule'), rule);
         return rules[i].fire(word);
       }
     }
@@ -87,53 +87,53 @@ class Inflector {
     // }
     if (!word || !word.length) return false;
 
-    let dbug = opts && opts.dbug;
+    const dbug = opts && opts.dbug;
 
     word = word.toLowerCase();
 
     if (this.RiTa.lexicon.isMassNoun(word)) { // 12/6/23
-      dbug && console.log(word + " is mass noun");
+      dbug && console.log(`${word} is mass noun`);
       return true;
     }
 
     for (let i = 0; i < IS_PLURAL_RULES.length; i++) {
-      let rule = IS_PLURAL_RULES[i];
+      const rule = IS_PLURAL_RULES[i];
       if (rule.test(word)) {
-        dbug && console.log(word + ' (isPlural) hit plural'
-          + (i < IS_PLURAL_RULES.length - 1 ? ' rule #' + i : ' DEFAULT rule'), rule);
+        dbug && console.log(`${word} (isPlural) hit plural`
+          + (i < IS_PLURAL_RULES.length - 1 ? ` rule #${i}` : ' DEFAULT rule'), rule);
         return true;
       }
     }
-    dbug && console.log(word + " (isPlural) hit no plural rules");
+    dbug && console.log(`${word} (isPlural) hit no plural rules`);
 
     // A general modal form? (for example, ends in 'ness')
     if (/([a-z]+ness)$/.test(word)) {
-      if (!this.RiTa.MODAL_EXCEPTIONS.includes(word)) {
-        dbug && console.log(word + " is general modal form");
-        return true;
+      if (this.RiTa.MODAL_EXCEPTIONS.includes(word)) {
+        dbug && console.log(`${word} is modal exception`);
+        // return false; QUESTION: return here?
       }
       else {
-        dbug && console.log(word + " is modal exception");
-        // return false; QUESTION: return here?
+        dbug && console.log(`${word} is general modal form`);
+        return true;
       }
     }
 
-    let sing = this.singularize(word, opts);
+    const sing = this.singularize(word, opts);
 
     // Is singularized form different 
     if (sing !== word) {
 
-      if (word.endsWith("ae") && word === sing + "e") {
-        dbug && console.log(word + ": latin rule -a to -ae");
+      if (word.endsWith("ae") && word === `${sing}e`) {
+        dbug && console.log(`${word}: latin rule -a to -ae`);
         return true;
       }
 
       //if (this.RiTa.HAS_LEXICON) {
         // It it in lexicon as 'nn' (with noGuessing)?
-        let tags = this.RiTa.tagger.allTags(sing, { noGuessing: true });
+        const tags = this.RiTa.tagger.allTags(sing, { noGuessing: true });
         if (tags.includes("nn")) { // fix for words like 'child' ?
           // mass nouns should have been detected above
-          dbug && console.log(word + "'s singular form " + sing + " is nn");
+          dbug && console.log(`${word}'s singular form ${sing} is nn`);
           return true;
         }
       // }
@@ -142,14 +142,15 @@ class Inflector {
       // }
     }
 
-    dbug && console.log(word + ' (isPlural) no matches, return false');
+    dbug && console.log(`${word} (isPlural) no matches, return false`);
 
     return false;
   }
 }
 
 const RE = Util.RE;
-const PLUR = 1, SING = 2;
+const PLUR = 1;
+const SING = 2;
 const DEFAULT_SING = RE("^.*[^s]s$", 1);
 const DEFAULT_PLUR = RE("^((\\w+)(-\\w+)*)(\\s((\\w+)(-\\w+)*))*$", 0, "s");
 
@@ -191,8 +192,8 @@ const SING_RULES = [
   RE("^(meninges|phalanges)$", 3, "x"), // x -> ges
   RE("^(octopus|pinch|fetus|genus|sinus|tomato|kiss|pelvis)es$", 2),
   RE("^(whizzes)$", 3),
-  RE("^(" + NOUNS_ENDING_IN_E + ")s$", 1, ""),
-  RE("^(" + NOUNS_ENDING_IN_S + ")es$", 2, ""),
+  RE(`^(${NOUNS_ENDING_IN_E})s$`, 1, ""),
+  RE(`^(${NOUNS_ENDING_IN_S})es$`, 2, ""),
   RE("(l|w|kn)ives$", 3, "fe"),
   RE("(men|women)$", 2, "an"),
   RE("ves$", 3, "f"),

@@ -2,8 +2,7 @@ import { expect } from "chai";
 import { RiTa } from "./index.js";
 describe("Core", () => {
   it("Should have access to statics", function() {
-    if (typeof process === "undefined")
-      return;
+    if (typeof process === "undefined") return;
     if (process.env.NODE_ENV !== "dev") {
       if (typeof process.env.npm_package_version === "undefined") {
         console.warn("[WARN] No package version: ignore if running in vscode ");

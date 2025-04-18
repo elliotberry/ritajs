@@ -128,8 +128,7 @@ describe("Conjugator", function() {
     }
   });
   it("Should conjugate VBDs", function() {
-    if (!hasLex)
-      this.skip();
+    if (!hasLex) this.skip();
     expect(RiTa.conjugate("go", {
       number: RiTa.SINGULAR,
       person: RiTa.FIRST,
@@ -142,8 +141,7 @@ describe("Conjugator", function() {
     })).eq("ran");
   });
   it("Should call conjugate", function() {
-    if (!hasLex)
-      this.skip();
+    if (!hasLex) this.skip();
     let args, s, a, c;
     expect(RiTa.conjugate("walk")).eq("walk");
     expect(function() {
@@ -377,8 +375,7 @@ describe("Conjugator", function() {
     RiTa.conjugate("swim", "2PPa");
   });
   it("Should call toString", function() {
-    if (!hasLex)
-      this.skip();
+    if (!hasLex) this.skip();
     expect(RiTa.conjugator.toString()).eq("  ---------------------\n  Passive = false\n  Perfect = false\n  Progressive = false\n  ---------------------\n  Number = 8\n  Person = 2\n  Tense = 4\n  ---------------------\n");
   });
   it("Should accept stems", function() {
@@ -437,8 +434,7 @@ describe("Conjugator", function() {
     });
   });
   it("Should call unconjugate", function() {
-    if (!hasLex)
-      this.skip();
+    if (!hasLex) this.skip();
     expect(RiTa.conjugator.unconjugate("trepanning")).eq("trepan");
     expect(RiTa.conjugator.unconjugate("plays")).eq("play");
     expect(RiTa.conjugator.unconjugate("takes")).eq("take");

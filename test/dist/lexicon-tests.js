@@ -586,8 +586,7 @@ describe("Lexicon", function() {
     expect(result.length > 0, "randomWord nns: " + result).to.be.true;
     syllables = RiTa.syllables(result);
     let count = syllables.split(RiTa.SYLLABLE_BOUNDARY).length;
-    if (count !== 5)
-      console.warn("Syllabifier problem: " + result + ".syllables was " + count + ", expected 5");
+    if (count !== 5) console.warn("Syllabifier problem: " + result + ".syllables was " + count + ", expected 5");
     expect(RiTa.isNoun(result)).eq(true, fail(result, "nns"));
   });
   it("Should call alliterations.numSyllables", async function() {

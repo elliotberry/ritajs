@@ -275,11 +275,12 @@ class RiTa {
    * @returns {boolean} true if the word is an abbreviation, else false
    */
   static isAbbrev(input, options) {
-    if (typeof input === 'string') {
-      if (options?.caseSensitive) return RiTa.ABRV.includes(input.trim());
-      let check = input.trim().toLowerCase();
-      return RiTa.ABRV.some(a => a.toLowerCase() === check);
+    if (typeof input !== 'string') {
+      return;
     }
+    if (options?.caseSensitive) return RiTa.ABRV.includes(input.trim());
+    const check = input.trim().toLowerCase();
+    return RiTa.ABRV.some(a => a.toLowerCase() === check);
   }
 
   /**

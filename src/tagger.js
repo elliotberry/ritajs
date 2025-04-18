@@ -16,7 +16,7 @@ class Tagger {
 
   isVerb(word, opts) {
 
-    let conj = this.RiTa.conjugator;
+    const conj = this.RiTa.conjugator;
 
     // check irregular verbs (added 7/31/21) 
     if (this._isNoLexIrregularVerb(word)) return true;
@@ -24,29 +24,29 @@ class Tagger {
     if (conj.IRREG_VERBS_NOLEX.hasOwnProperty(word)) return true;
 
     // any verbs (vb*) in lexicon
-    let pos = this.allTags(word, opts);
+    const pos = this.allTags(word, opts);
     return pos.some(p => VERBS.includes(p));
   }
 
   isNoun(word) {
     // see https://github.com/dhowe/rita/issues/130
-    let pos = this.allTags(word, { noGuessing: true });
+    const pos = this.allTags(word, { noGuessing: true });
     return pos.some(p => NOUNS.includes(p));
   }
 
   isAdverb(word) {
-    let pos = this.allTags(word);
+    const pos = this.allTags(word);
     return pos.some(p => ADVS.includes(p));
   }
 
   isAdjective(word) {
-    let pos = this.allTags(word);
+    const pos = this.allTags(word);
     return pos.some(p => ADJS.includes(p));
   }
 
   hasTag(choices, tag) {
     if (!Array.isArray(choices)) return false;
-    let choiceStr = choices.join();
+    const choiceStr = choices.join();
     return (choiceStr.indexOf(tag) > -1);
   }
 
@@ -56,7 +56,7 @@ class Tagger {
     if (!words || !words.length) return '';
 
     if (words.length !== tags.length) {
-      throw Error('Tagger: invalid state: words(' + words.length
+      throw Error(`Tagger: invalid state: words(${words.length}`
         + ')=' + words + ' tags(' + tags.length + ')=' + tags);
     }
 
@@ -75,11 +75,11 @@ class Tagger {
 
   allTags(word, opts = {}) { // returns an array of choices
 
-    let noGuessing = opts.noGuessing || false;
-    let noDerivations = opts.noDerivations || false;
+    const noGuessing = opts.noGuessing || false;
+    const noDerivations = opts.noDerivations || false;
 
     if (word && typeof word === 'string' && word.length) {
-      let posData = this.RiTa.lexicon._posArr(word);
+      const posData = this.RiTa.lexicon._posArr(word);
       if (posData && posData.length > 0) return posData;
       if (word.includes("-") && opts.noGuessingOnHyphenated) return [];  //#HWF
       if (!noDerivations) return this._derivePosData(word, noGuessing);
@@ -101,15 +101,19 @@ class Tagger {
     simple: false,
   }) {
 
-    let result = [], choices2d = [];
+    const result = [];
+    const choices2d = [];
     // @ts-ignore
-    let dbug = opts?.dbug || false;
+    const dbug = opts?.dbug || false;
 
     if (!input || !input.length) return opts.inline ? '' : [];
 
     /** @type {string[]} */
     let words;
-    if (!Array.isArray(input)) {
+    if (Array.isArray(input)) {
+      words = input;
+    }
+    else {
 
       // likely a string
       if (!input.trim().length) { // empty string
@@ -118,13 +122,10 @@ class Tagger {
       // else tokenize to array
       words = this.RiTa.tokenizer.tokenize(input);
     }
-    else {
-      words = input;
-    }
 
     for (let i = 0, l = words.length; i < l; i++) {
 
-      let word = words[i];
+      const word = words[i];
       if (!word || !word.length) continue;
 
       if (this.RiTa.isPunct(word)) {
@@ -135,14 +136,14 @@ class Tagger {
       }
       else {
         //#HWF: skip guessing for not-in-dict hyphenated words as we deal with these later 
-        let opts = this.allTags(word, { noGuessingOnHyphenated: true });
+        const opts = this.allTags(word, { noGuessingOnHyphenated: true });
         choices2d[i] = opts;// || []; // all options
         result[i] = opts.length ? opts[0] : '__HYPH__'; // first option
       }
     }
 
     // Adjust pos according to transformation rules
-    let tags = this._applyContext(words, result, choices2d, dbug);
+    const tags = this._applyContext(words, result, choices2d, dbug);
 
     if (opts.simple) { // convert to simple tags
       for (let i = 0; i < tags.length; i++) {
@@ -164,16 +165,14 @@ class Tagger {
   }
 
   _checkPluralNounOrVerb(stem, result) {
-    let pos = this.RiTa.lexicon._posArr(stem);
+    const pos = this.RiTa.lexicon._posArr(stem);
     if (pos) {
       if (pos.includes('nn')) result.push('nns'); // ?? any case
       if (pos.includes('vb')) result.push('vbz');
     }
 
     // finally check irregular verb list
-    if (!pos || !pos.includes("vbz")) {
-      if (this._isNoLexIrregularVerb(stem)) result.push('vbz');
-    }
+    if ((!pos || !pos.includes("vbz")) && this._isNoLexIrregularVerb(stem)) result.push('vbz');
   }
 
   _safeConcat(a, b) {
@@ -198,7 +197,8 @@ class Tagger {
       VBZ 	Verb, 3rd person singular present
       NNS   Noun, plural
     */
-    const lex = this.RiTa.lexicon, tags = lex._posArr(word);
+    const lex = this.RiTa.lexicon;
+    const tags = lex._posArr(word);
 
     if (word.endsWith("ress")) {
       let pos = lex._posArr(word.substring(0, word.length - 3)); // murderess
@@ -219,7 +219,7 @@ class Tagger {
         //actress - act
         return ["nn"];
       }
-      pos = lex._posArr(word.substring(0, word.length - 2) + "e"); // investigator, creator
+      pos = lex._posArr(`${word.substring(0, word.length - 2)}e`); // investigator, creator
       if (pos && pos.includes("vb")) {
         return ["nn"];
       }
@@ -240,13 +240,13 @@ class Tagger {
     }
 
     if (word.endsWith('ies')) { // 3rd-person sing. present (satisfies, falsifies)
-      let check = word.substring(0, word.length - 3) + "y";
-      let pos = lex._posArr(check);
+      const check = `${word.substring(0, word.length - 3)}y`;
+      const pos = lex._posArr(check);
       if (pos && pos.includes('vb')) return ['vbz'];
     }
     else if (word.endsWith('s')) {  // singular noun ('bonus', 'census'), plural noun or vbz
 
-      let result = [];
+      const result = [];
 
       // remove suffix (s) and test (eg 'hates', 'cakes')
       this._checkPluralNounOrVerb(word.substring(0, word.length - 1), result);
@@ -264,7 +264,7 @@ class Tagger {
     }
 
     if (word.endsWith('ed')) { // simple past or past participle
-      let pos = lex._posArr(word.substring(0, word.length - 1))
+      const pos = lex._posArr(word.substring(0, word.length - 1))
         || lex._posArr(word.substring(0, word.length - 2))
         || lex._posArr(word.substring(0, word.length - 3)); //e.g deterred
       if (pos && pos.includes('vb')) {
@@ -273,7 +273,7 @@ class Tagger {
     }
 
     if (word.endsWith('ing')) {
-      let stem = word.substring(0, word.length - 3);
+      const stem = word.substring(0, word.length - 3);
       if (stem) {
         let pos = lex._posArr(stem);
         if (pos && pos.includes('vb')) {
@@ -282,11 +282,9 @@ class Tagger {
           // elsewhere tags are analyzed by context according to ruleset.
           return ['vbg', 'nn']; // assenting 
         }
-        else {
-          pos = lex._posArr(stem + 'e'); // hate
-          if (pos && pos.includes('vb')) {
-            return ['vbg', 'nn'];  //  e.g: let's go hiking
-          }
+        pos = lex._posArr(`${stem}e`); // hate
+        if (pos && pos.includes('vb')) {
+          return ['vbg', 'nn'];  //  e.g: let's go hiking
         }
         // else
         if (word.charAt(word.length - 4) === word.charAt(word.length - 5)) {
@@ -299,7 +297,7 @@ class Tagger {
     }
 
     if (word.endsWith('ly')) {
-      let stem = word.substring(0, word.length - 2);
+      const stem = word.substring(0, word.length - 2);
       if (stem) {
         let pos = lex._posArr(stem);
         if (pos && pos.includes("jj")) {
@@ -307,7 +305,7 @@ class Tagger {
           return ['rb'];
         }
         if (stem.charAt(stem.length - 1) === 'i') {
-          pos = lex._posArr(stem.substring(0, stem.length - 1) + "y");
+          pos = lex._posArr(`${stem.substring(0, stem.length - 1)}y`);
           if (pos && pos.includes("jj")) {
             // happily - happy
             return ['rb'];
@@ -320,7 +318,7 @@ class Tagger {
     if (this.isLikelyPlural(word)) return ['nns'];
 
     // Check if is irregular past part of a verb
-    let conj = this.RiTa.conjugator;
+    const conj = this.RiTa.conjugator;
     if (conj.IRREG_PAST_PART.includes(word)) return ['vbd'];
 
     // Give up 
@@ -340,7 +338,7 @@ class Tagger {
   }
 
   _log(i, frm, to) { // log custom tag
-    console.log("\n  Custom(" + i + ") tagged '" + frm + "' -> '" + to + "'\n\n");
+    console.log(`\n  Custom(${i}) tagged '${frm}' -> '${to}'\n\n`);
   }// debug only: not available in built version since 'dbug' in tag() is 0
 
   /**
@@ -356,13 +354,14 @@ class Tagger {
     // Apply transformations
     for (let i = 0, l = words.length; i < l; i++) {
 
-      let word = words[i], tag = result[i];
+      const word = words[i];
+      let tag = result[i];
       if (!word || !word.length) continue;
 
       if (typeof tag === 'undefined') {
         tag = '';
         if (!this.RiTa.SILENT) console.warn
-          ('\n[WARN] Unexpected state in _applyContext for idx=' + i, words, '\n');
+          (`\n[WARN] Unexpected state in _applyContext for idx=${i}`, words, '\n');
       }
 
       // transform 1a: DT, {VBD | VBP | VB} --> DT, NN
@@ -372,37 +371,31 @@ class Tagger {
           tag = "nn";
           // transform 7: if a word has been categorized as a common noun 
           // and it ends with "s", then set its type to plural noun (NNS)
-          if (word.match(/^.*[^s]s$/)) {
-            if (!this.RiTa.MASS_NOUNS.includes(word)) {
-              tag = "nns";
-            }
+          if (word.match(/^.*[^s]s$/) && !this.RiTa.MASS_NOUNS.includes(word)) {
+            tag = "nns";
           }
           //dbug && this._log("1a", word, tag);
         }
 
         // transform 1b: DT, {RB | RBR | RBS} --> DT, {JJ | JJR | JJS}
         else if (tag.startsWith("rb")) {
-          tag = (tag.length > 2) ? "jj" + tag.charAt(2) : "jj";
+          tag = (tag.length > 2) ? `jj${tag.charAt(2)}` : "jj";
           //dbug && this._log("1b", word, tag);
         }
       }
 
       // transform 2: convert a noun to a number (cd) if it is
       // all digits and/or a decimal "."
-      if (tag.startsWith("n")) { //choices[i] always exist (from allTags())
-        if (Util.isNum(word)) {
-          tag = "cd";
-          //dbug && this._log(2, word, tag);
-        } // mods: dch (add choice check above) <---- ? >
-      }
+      if (tag.startsWith("n") && Util.isNum(word)) {
+        tag = "cd";
+        //dbug && this._log(2, word, tag);
+      } // mods: dch (add choice check above) <---- ? >
 
       // transform 3: convert a noun to a past participle if
       // word ends with "ed" and (following any nn or prp?)
-      if (i > 0 && tag.startsWith("n") && word.endsWith("ed") && result[i - 1].match(/^(nn|prp)$/)) {
-        if (!word.endsWith("eed")) {
-          //dbug && this._log(3, word, tag);
-          tag = "vbn";
-        }
+      if (i > 0 && tag.startsWith("n") && word.endsWith("ed") && result[i - 1].match(/^(nn|prp)$/) && !word.endsWith("eed")) {
+        //dbug && this._log(3, word, tag);
+        tag = "vbn";
       }
 
       // transform 4: convert any type to adverb if it ends in "ly";
@@ -434,13 +427,9 @@ class Tagger {
 
       // transform 8: convert a common noun to a present
       // participle verb (i.e., a gerund)
-      if (tag.startsWith("nn") && word.endsWith("ing")) {
-
-        // DH: fixed here -- add check on choices for any verb: eg. // 'morning'
-        if (this.hasTag(choices[i], "vbg")) { // fixed for 'fishing' and etc
-          tag = "vbg";
-          //dbug && this._log(8, word, tag);
-        }
+      if (tag.startsWith("nn") && word.endsWith("ing") && this.hasTag(choices[i], "vbg")) { // fixed for 'fishing' and etc
+        tag = "vbg";
+        //dbug && this._log(8, word, tag);
       }
 
       // transform 9(dch): convert plural nouns (which are also 3sg-verbs) to
@@ -457,7 +446,7 @@ class Tagger {
 
         //if it is not at the start of a sentence or it is the only word
         // or when it is at the start of a sentence but can't be found in the dictionary
-        let sing = this.RiTa.singularize(word.toLowerCase());
+        const sing = this.RiTa.singularize(word.toLowerCase());
         if (words.length === 1 || i > 0 || (i == 0 && !this._lexHas('nn', sing))) {
           tag = tag.endsWith("s") ? "nnps" : "nnp";
           //dbug && this._log(10, word, tag);
@@ -477,7 +466,7 @@ class Tagger {
       if (tag === "nns") {
 
         // is preceded by one of the following
-        if (i > 0 && ["nn", "prp", "cc", "nnp"].indexOf(result[i - 1]) > -1) {
+        if (i > 0 && ["nn", "prp", "cc", "nnp"].includes(result[i - 1])) {
           // if word is ends with s or es and is 'nns' and has a vb
           if (this._lexHas('vb', this.RiTa.singularize(word))) {
             tag = "vbz";
@@ -489,7 +478,7 @@ class Tagger {
           // (when the word is not in lexicon, generated by _derivePosData())
           // if the stem of a single word could be both nn and vb, return nns
           // only return vbz when the stem is vb but not nn
-          let sing = this.RiTa.singularize(word.toLowerCase());
+          const sing = this.RiTa.singularize(word.toLowerCase());
           if (!this._lexHas('nn', sing) && this._lexHas('vb', sing)) { //hmm any example?
             tag = "vbz";
             //dbug && this._log(12, word, tag);
@@ -499,17 +488,15 @@ class Tagger {
 
       // transform 13(cqx): convert a vb/ potential vb to vbp 
       // when following nns (Elephants dance, they dance)
-      if (tag === "vb" || (tag === "nn" && this.hasTag(choices[i], "vb"))) {
-        if (i > 0 && result[i - 1].match(/^(nns|nnps|prp)$/)) {
-          tag = "vbp";
-          //dbug && this._log(13, word, tag);
-        }
+      if ((tag === "vb" || (tag === "nn" && this.hasTag(choices[i], "vb"))) && (i > 0 && result[i - 1].match(/^(nns|nnps|prp)$/))) {
+        tag = "vbp";
+        //dbug && this._log(13, word, tag);
       }
 
       // issue#83 sequential adjectives(jc): (?:dt)? (?:jj)* (nn) (?:jj)* nn 
       // && $1 can be tagged as jj-> $1 convert to jj (e.g a light blue sky)
       if (tag === "nn" && result.slice(i + 1).includes("nn")) {
-        let idx = result.slice(i + 1).indexOf("nn");
+        const idx = result.slice(i + 1).indexOf("nn");
         let allJJ = true; // between nn and nn are all jj
         for (let k = 0; k < idx; k++) {
           if (result[i + 1 + k] !== "jj") {
@@ -539,7 +526,7 @@ class Tagger {
         if (word === '--') continue; // double hyphen treated as dash
         if (HYPHENATEDS.hasOwnProperty(word)) {
           result[i] = HYPHENATEDS[word];
-          if (dbug) console.log(word + ": " + HYPHENATEDS[word] + " ACC: special");
+          if (dbug) console.log(`${word}: ${HYPHENATEDS[word]} ACC: special`);
           continue;
         }
         tag = this._tagCompoundWord(word, tag, result, words, i, dbug);
@@ -554,29 +541,30 @@ class Tagger {
   // determine tag for compound (hyphenated) word
   _tagCompoundWord(word, tag, result, context, i, dbug) { // #HWF
 
-    let words = word.split("-");
-    let firstPart = words[0], lastPart = words[words.length - 1];
-    let firstPartAllTags = this.allTags(firstPart);
-    let lastPartAllTags = this.allTags(lastPart);
+    const words = word.split("-");
+    const firstPart = words[0];
+    const lastPart = words[words.length - 1];
+    const firstPartAllTags = this.allTags(firstPart);
+    const lastPartAllTags = this.allTags(lastPart);
 
     if (words.length === 2 && VERB_PREFIX.includes(words[0])
       && lastPartAllTags.some(t => /^vb/.test(t))) {
 
       tag = lastPartAllTags.find(t => /^vb/.test(t));
-      if (dbug) console.log(word + ": " + tag + " ACC: prefix-vb");
+      if (dbug) console.log(`${word}: ${tag} ACC: prefix-vb`);
     }
     else if (words.length === 2 && NOUN_PREFIX.includes(words[0])
       && lastPartAllTags.some(t => /^nn/.test(t))) {
 
       tag = lastPartAllTags.find(t => /^nn/.test(t));
-      if (dbug) console.log(word + ": " + tag + " ACC: prefix-nn");
+      if (dbug) console.log(`${word}: ${tag} ACC: prefix-nn`);
     }
     else if (firstPartAllTags.some(t => /^cd/.test(t))) {
 
       // numbers
       let allCD = true;
       for (let z = 1; z < words.length; z++) {
-        let part = words[z];
+        const part = words[z];
         if (!(this.allTags(part).some(t => /^cd/.test(t)))) {
           allCD = false;
           break;
@@ -584,19 +572,19 @@ class Tagger {
       }
       if (allCD) {
         tag = "cd"
-        if (dbug) console.log(word + ": " + tag + " ACC: cd(-cd)+ ");
+        if (dbug) console.log(`${word}: ${tag} ACC: cd(-cd)+ `);
       }
       else {
         //ordinal number like twenty-first
         tag = "jj"
-        if (dbug) console.log(word + ": " + tag + " ACC: cd(-jj/nn)+ ");
+        if (dbug) console.log(`${word}: ${tag} ACC: cd(-jj/nn)+ `);
       }
     }
     else if (firstPartAllTags.some(t => t.startsWith('jj'))
       && words.length === 2 && lastPartAllTags.some(t => t.startsWith('nn'))) {
 
       tag = 'jj'
-      if (dbug) console.log(word + ": " + tag + " ACC: jj-nn");
+      if (dbug) console.log(`${word}: ${tag} ACC: jj-nn`);
     }
     else if (firstPartAllTags.some(t => t === 'vb')
       && !firstPartAllTags.some(t => t.startsWith('jj'))) {
@@ -607,7 +595,7 @@ class Tagger {
 
         // verb phrase with in, e.g. blush-on tip-off get-together run-in
         tag = "nn"
-        if (dbug) console.log(word + ": " + tag + " ACC: vb-in");
+        if (dbug) console.log(`${word}: ${tag} ACC: vb-in`);
       }
       else if (words.length === 2
         && lastPartAllTags.some(t => /^(vb[gdp])/.test(t))
@@ -615,15 +603,15 @@ class Tagger {
 
         // man-eating
         tag = "jj"
-        if (dbug) console.log(word + ": " + tag + " ACC: vb-vbg/vbd/vbp");
+        if (dbug) console.log(`${word}: ${tag} ACC: vb-vbg/vbd/vbp`);
       }
       else if (words.length === 2 && lastPartAllTags.some(t => t.startsWith('jj'))) {
         tag = 'jj'
-        if (dbug) console.log(word + ": " + tag + " ACC: vb-jj");
+        if (dbug) console.log(`${word}: ${tag} ACC: vb-jj`);
       }
       else {
         tag = "nn"
-        if (dbug) console.log(word + ": " + tag + " ACC: vb(-.)+ general");
+        if (dbug) console.log(`${word}: ${tag} ACC: vb(-.)+ general`);
       }
     }
     else if (((lastPartAllTags.some(t => /^(jj[rs]?)/.test(t))
@@ -632,7 +620,7 @@ class Tagger {
 
       // last part is jj or vbd/vbn/vbg
       tag = "jj"
-      if (dbug) console.log(word + ": " + tag + " ACC: last part jj or vbd/vbg");
+      if (dbug) console.log(`${word}: ${tag} ACC: last part jj or vbd/vbg`);
     }
     else if (lastPartAllTags.some(t => /^[n]/.test(t))) {
 
@@ -640,12 +628,12 @@ class Tagger {
       if (firstPartAllTags.some(t => /^(in|rb)/.test(t))) {
         // over-the-counter; before-hand etc
         tag = "jj"
-        if (dbug) console.log(word + ": " + tag + " ACC: in/rb(-.)*-nn");
+        if (dbug) console.log(`${word}: ${tag} ACC: in/rb(-.)*-nn`);
       }
       else {
         let lastNounIsMajor = true;
         for (let z = 0; z < words.length - 1; z++) {
-          let part = words[z];
+          const part = words[z];
           if (!(this.allTags(part).some(t => /^([jn]|dt|in)/.test(t)))) {
             lastNounIsMajor = false;
             break;
@@ -653,11 +641,11 @@ class Tagger {
         }
         if (lastNounIsMajor) {
           tag = "nn"
-          if (dbug) console.log(word + ": " + tag + " ACC: all nn");
+          if (dbug) console.log(`${word}: ${tag} ACC: all nn`);
         }
         else {
           tag = "jj"
-          if (dbug) console.log(word + ": " + tag + " ACC: (.-)+nn");
+          if (dbug) console.log(`${word}: ${tag} ACC: (.-)+nn`);
         }
       }
     }
@@ -665,45 +653,44 @@ class Tagger {
       // first part can be a noun: father-in-law etc.
       // numbers depend on this noun
       tag = this.RiTa.inflector.isPlural(words[0]) ? "nns" : "nn";
-      if (dbug) console.log(word + ": " + tag + " ACC: nn(-.)+");
+      if (dbug) console.log(`${word}: ${tag} ACC: nn(-.)+`);
     }
     else {
       tag = "nn"; //generually it should be nn
-      if (dbug) console.log(word + ": " + tag + " ACC: no rule hit");
+      if (dbug) console.log(`${word}: ${tag} ACC: no rule hit`);
     }
 
     // change according to context
     if (result[i + 1] && result[i + 1].startsWith("n") && tag.startsWith("n")) {
       //next word is a noun
-      tag = "jj";
+      return "jj";
     }
     else if (tag === 'jj' && result[i + 1] && result[i + 1].startsWith("v")) {
       //next word is a verb, last part is rb/verb
       tag = "rb";
     }
     else if (result[i + 1] && result[i + 1].startsWith("v") && tag === 'jj') {
-      tag = "rb"
+      return "rb";
     }
-    else if (tag === 'jj' && context[i - 1] && ARTICLES.includes(context[i - 1].toLowerCase().trim())) {
-      if (!context[i + 1] || (result[i + 1] && /^(v|cc|in|md|w)/.test(result[i + 1])) || this.RiTa.isPunct(context[i + 1])) {
-        tag = 'nn';
-      }
+    else if (tag === 'jj' && context[i - 1] && ARTICLES.includes(context[i - 1].toLowerCase().trim()) && (!context[i + 1] || (result[i + 1] && /^(v|cc|in|md|w)/.test(result[i + 1])) || this.RiTa.isPunct(context[i + 1]))) {
+      return 'nn';
     }
     return tag;
   }
 
   _lexHas(pos, word) { // takes ([n|v|a|r] or a full tag
-    if (typeof word === 'string') {
-      let tags = this.RiTa.lexicon._posArr(word);
-      if (!tags) return false;
-      for (let j = 0; j < tags.length; j++) {
-        if (pos === tags[j]) return true;
-        if (pos === 'n' && NOUNS.includes(tags[j]) ||
-          pos === 'v' && VERBS.includes(tags[j]) ||
-          pos === 'r' && ADVS.includes(tags[j]) ||
-          pos === 'a' && ADJS.includes/*.isAdjTag*/(tags[j])) {
-          return true;
-        }
+    if (typeof word !== 'string') {
+      return;
+    }
+    const tags = this.RiTa.lexicon._posArr(word);
+    if (!tags) return false;
+    for (let j = 0; j < tags.length; j++) {
+      if (pos === tags[j]) return true;
+      if (pos === 'n' && NOUNS.includes(tags[j]) ||
+        pos === 'v' && VERBS.includes(tags[j]) ||
+        pos === 'r' && ADVS.includes(tags[j]) ||
+        pos === 'a' && ADJS.includes/*.isAdjTag*/(tags[j])) {
+        return true;
       }
     }
   }

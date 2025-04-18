@@ -60,13 +60,13 @@ class RiMarkov {
    */
   addText(text, multiplier = 1) {
 
-    let sents = Array.isArray(text) ? text : RiMarkov.parent.sentences(text);
+    const sents = Array.isArray(text) ? text : RiMarkov.parent.sentences(text);
 
     // add new tokens for each sentence start/end
-    let allWords = [];
+    const allWords = [];
     for (let k = 0; k < multiplier; k++) {
       for (let i = 0; i < sents.length; i++) {
-        let words = this.tokenize(sents[i]);
+        const words = this.tokenize(sents[i]);
         this.sentenceStarts.push(words[0]);
         this.sentenceEnds.add(words[words.length - 1]);
         allWords.push(...words);
@@ -126,9 +126,11 @@ class RiMarkov {
       throw Error("Temperature option must be greater than 0");
     }
 
-    let tries = 0, tokens = [];//, usedStarts = [];
-    let minIdx = 0, sentenceIdxs = [];
-    let markedNodes = [];
+    let tries = 0;
+    const tokens = [];//, usedStarts = [];
+    const minIdx = 0;
+    let sentenceIdxs = [];
+    const markedNodes = [];
 
     ////////////////////////// local functions /////////////////////////////
 
@@ -149,43 +151,43 @@ class RiMarkov {
     }
 
     const notMarked = (cn) => {
-      let tmap = tokens.reduce((acc, e) => acc + e.token, '');
+      const tmap = tokens.reduce((acc, e) => acc + e.token, '');
       return cn.marked !== tmap;
     }
 
     const validateSentence = (next) => {
 
       markNode(next);
-      let sentIdx = sentenceIdx();
+      const sentIdx = sentenceIdx();
 
       if (this.trace) console.log(1 + (tokens.length - sentIdx),
         next.token, '[' + next.parent.childNodes().filter
           (t => t !== next).map(t => t.token) + ']'); // print each child
 
-      let sentence = tokens.slice(sentIdx).map(t => t.token);
+      const sentence = tokens.slice(sentIdx).map(t => t.token);
       sentence.push(next.token);
 
       if (sentence.length < minLength) {
-        fail('too-short (pop: ' + next.token + ')');
+        fail(`too-short (pop: ${next.token})`);
         //console.log('pop: ' + next.token);
         return false;
       }
 
       if (!this.disableInputChecks && isSubArray(sentence, this.input)) {
-        fail('in-input (pop: ' + next.token + ')');
+        fail(`in-input (pop: ${next.token})`);
         return false;
       }
 
-      let flatSent = this.untokenize(sentence);
+      const flatSent = this.untokenize(sentence);
       if (!options.allowDuplicates && isSubArray(sentence, tokens.slice(0, sentIdx))) {
-        fail('duplicate (pop: ' + next.token + ')');
+        fail(`duplicate (pop: ${next.token})`);
         return false;
       }
 
       tokens.push(next);
       sentenceIdxs.push(tokens.length);
 
-      if (this.trace) console.log('OK (' + resultCount() + '/' + num + ') "' +
+      if (this.trace) console.log(`OK (${resultCount()}/${num}) "` +
         flatSent + '" sidxs=[' + sentenceIdxs + ']\n');
 
       return true;
@@ -193,16 +195,16 @@ class RiMarkov {
 
     const fail = (msg, sentence, forceBacktrack) => {
       tries++;
-      let sentIdx = sentenceIdx();
+      const sentIdx = sentenceIdx();
       sentence = sentence || this._flatten(tokens.slice(sentIdx));
       if (tries >= this.maxAttempts) throwError(tries, resultCount());
       //if (tokens.length >= this.maxAttempts) throwError(tries, resultCount()); // ???
-      let parent = this._pathTo(tokens);
-      let numChildren = parent ? parent.childNodes({ filter: notMarked }).length : 0;
+      const parent = this._pathTo(tokens);
+      const numChildren = parent ? parent.childNodes({ filter: notMarked }).length : 0;
 
-      if (this.trace) console.log('Fail:', msg, '\n  -> "' + sentence + '" ',
-        tries + ' tries, ' + resultCount() + ' successes, numChildren=' + numChildren
-        + (forceBacktrack ? ' forceBacktrack*' : (' parent="' + parent.token
+      if (this.trace) console.log('Fail:', msg, `\n  -> "${sentence}" `,
+        `${tries} tries, ${resultCount()} successes, numChildren=${numChildren}`
+        + (forceBacktrack ? ' forceBacktrack*' : (` parent="${parent.token}`
           + '" goodKids=[' + parent.childNodes({ filter: notMarked }).map(t => t.token) + ']'
           + '" allKids=[' + parent.childNodes().map(t => t.token) + ']')));
 
@@ -216,18 +218,19 @@ class RiMarkov {
     // if we find an option, return true
     const backtrack = () => {
 
-      let parent, tc;
+      let parent;
+      let tc;
       for (let i = 0; i < 99; i++) { // tmp-remove?
-        let last = tokens.pop();
+        const last = tokens.pop();
         markNode(last);
 
         if (this._isEnd(last)) sentenceIdxs.pop();
 
         let sentIdx = sentenceIdx();
-        let backtrackUntil = Math.max(sentIdx, minIdx);
+        const backtrackUntil = Math.max(sentIdx, minIdx);
 
-        if (this.trace) console.log('backtrack#' + tokens.length,
-          'pop "' + last.token + '" ' + (tokens.length - sentIdx)
+        if (this.trace) console.log(`backtrack#${tokens.length}`,
+          `pop "${last.token}" ${tokens.length - sentIdx}`
           + "/" + backtrackUntil + ' ' + this._flatten(tokens));
 
         parent = this._pathTo(tokens);
@@ -241,17 +244,15 @@ class RiMarkov {
               if (this.trace) console.log('case 1');
               return true;
             }
-            else { // back at sentence-start with seed
-              if (!tc.length) {
-                if (this.trace) console.log('case 2: back at SENT-START: "'
-                  + this._flatten(tokens) + '" sentenceIdxs=' + sentenceIdxs
-                  + ' ok=[' + parent.childNodes({ filter: notMarked }).map(t => t.token)
-                  + '] all=[' + parent.childNodes().map(t => t.token) + ']');
-                sentenceIdxs.pop();
-              }
-              else {  // continue
-                if (this.trace) console.log('case 3');
-              }
+            if (tc.length) {  // continue
+              if (this.trace) console.log('case 3');
+            }
+            else {
+              if (this.trace) console.log('case 2: back at SENT-START: "'
+                + this._flatten(tokens) + '" sentenceIdxs=' + sentenceIdxs
+                + ' ok=[' + parent.childNodes({ filter: notMarked }).map(t => t.token)
+                + '] all=[' + parent.childNodes().map(t => t.token) + ']');
+              sentenceIdxs.pop();
             }
           }
           else {             // TODO: recheck
@@ -285,7 +286,7 @@ class RiMarkov {
     }
 
     const sentenceIdx = () => {
-      let len = sentenceIdxs.length;
+      const len = sentenceIdxs.length;
       return len ? sentenceIdxs[len - 1] : 0;
     }
 
@@ -300,22 +301,22 @@ class RiMarkov {
           tokens.unshift(node);
           node = node.parent;
         }
+        return;
       }
 
       // we need a new sentence-start
-      else if (!tokens.length || this._isEnd(tokens[tokens.length - 1])) {
+      if (!tokens.length || this._isEnd(tokens[tokens.length - 1])) {
 
         let usableStarts = this.sentenceStarts.filter(ss => notMarked(this.root.child(ss)));
         if (!usableStarts.length) throw Error('No valid sentence-starts remaining');
-        let start = RiMarkov.parent.random(usableStarts);
-        let startTok = this.root.child(start);
+        const start = RiMarkov.parent.random(usableStarts);
+        const startTok = this.root.child(start);
         markNode(startTok);
         usableStarts = this.sentenceStarts.filter(ss => notMarked(this.root.child(ss)));
         tokens.push(startTok);
+        return;
       }
-      else {
-        throw Error('Invalid call to selectStart: ' + this._flatten(tokens));
-      }
+      throw Error(`Invalid call to selectStart: ${this._flatten(tokens)}`);
     }
 
     ////////////////////////////////// code ////////////////////////////////////////
@@ -324,18 +325,18 @@ class RiMarkov {
 
     while (resultCount() < num) {
 
-      let sentIdx = sentenceIdx();
+      const sentIdx = sentenceIdx();
 
       if (tokens.length - sentIdx >= maxLength) {
         fail('too-long', 0, true);
         continue;
       }
 
-      let parent = this._pathTo(tokens);
-      let next = this._selectNext(parent, options.temperature, tokens, notMarked);
+      const parent = this._pathTo(tokens);
+      const next = this._selectNext(parent, options.temperature, tokens, notMarked);
 
       if (!next) { // no valid children, pop and continue;
-        fail('mlm-fail(' + this.mlm + ')', this._flatten(tokens), true);
+        fail(`mlm-fail(${this.mlm})`, this._flatten(tokens), true);
         continue;
       }
 
@@ -353,7 +354,7 @@ class RiMarkov {
 
     unmarkNodes();
 
-    let str = this.untokenize(tokens.map(t => t.token)).trim();
+    const str = this.untokenize(tokens.map(t => t.token)).trim();
     return returnsArray ? this._splitEnds(str) : str;
   }
 
@@ -362,7 +363,7 @@ class RiMarkov {
    * @return {string} - the JSON string
    */
   toJSON() {
-    let data = Object.keys(this).reduce
+    const data = Object.keys(this).reduce
       ((acc, k) => Object.assign(acc, { [k]: this[k] }), {});
     // @ts-ignore
     data.sentenceEnds = [...data.sentenceEnds]; // set -> []
@@ -377,8 +378,8 @@ class RiMarkov {
   static fromJSON(json) {
 
     // parse the json and merge with new object
-    let parsed = parse(json);
-    let rm = Object.assign(new RiMarkov(), parsed);
+    const parsed = parse(json);
+    const rm = Object.assign(new RiMarkov(), parsed);
 
     // convert our json array back to a set
     rm.sentenceEnds = new Set(...parsed.sentenceEnds);
@@ -387,7 +388,7 @@ class RiMarkov {
     if (!parsed.input) rm.input = undefined;
 
     // then recreate the n-gram tree with Node objects
-    let jsonRoot = rm.root;
+    const jsonRoot = rm.root;
     populate(rm.root = new Node(null, 'ROOT'), jsonRoot);
 
     return rm;
@@ -401,17 +402,19 @@ class RiMarkov {
    * @return {string[]} - an unordered list of possible next tokens 
    */
   completions(pre, post) {
-    let tn, result = [];
+    let tn;
+    const result = [];
     if (post) { // fill the center
       if (pre.length + post.length > this.n) throw Error
-        ('Sum of pre.length && post.length must be <= N, was ' + (pre.length + post.length));
+        (`Sum of pre.length && post.length must be <= N, was ${pre.length + post.length}`);
       if (!(tn = this._pathTo(pre))) {
-        if (!RiMarkov.parent.SILENT) console.warn('Unable to find nodes in pre: ' + pre);
+        if (!RiMarkov.parent.SILENT) console.warn(`Unable to find nodes in pre: ${pre}`);
         return;
       }
       const nexts = tn.childNodes();
       for (let i = 0; i < nexts.length; i++) {
-        let atest = pre.slice(0), next = nexts[i];
+        const atest = pre.slice(0);
+        const next = nexts[i];
         atest.push(next.token, ...post);
         if (this._pathTo(atest)) {
           result.push(next.token);
@@ -419,7 +422,7 @@ class RiMarkov {
       }
     } else { // fill the end
       const pr = this.probabilities(pre);
-      result = Object.keys(pr).sort((a, b) => pr[b] - pr[a]);
+      return Object.keys(pr).sort((a, b) => pr[b] - pr[a]);
     }
     return result;
   }
@@ -451,13 +454,12 @@ class RiMarkov {
    * @return {number} - the probability of the token or sequence
    */
   probability(data) {
-    let p = 0;
     if (data && data.length) {
-      let tn = (typeof data === 'string') ?
+      const tn = (typeof data === 'string') ?
         this.root.child(data) : this._pathTo(data);
-      if (tn) p = tn.nodeProb(true); // no meta
+      if (tn) return tn.nodeProb(true); // no meta
     }
-    return p;
+    return 0;
   }
 
   /**
@@ -484,11 +486,11 @@ class RiMarkov {
   // selects child based on temp, filter and probability (throws)
   _selectNext(parent, temp, tokens, filter) {
 
-    if (!parent) throw Error('no parent:' + this._flatten(tokens));
+    if (!parent) throw Error(`no parent:${this._flatten(tokens)}`);
 
-    let children = parent.childNodes({ filter });
+    const children = parent.childNodes({ filter });
     if (!children.length) {
-      if (this.trace) console.log('No children to select, parent=' + parent.token
+      if (this.trace) console.log(`No children to select, parent=${parent.token}`
         + ' children=ok[], all=[' + parent.childNodes().map(t => t.token) + ']');
       return;
     }
@@ -499,7 +501,7 @@ class RiMarkov {
     }
 
     const validateMlms = (word, nodes) => {
-      let check = nodes.slice(-this.mlm).map(n => n.token);
+      const check = nodes.slice(-this.mlm).map(n => n.token);
       check.push(word.token);
       return !isSubArray(check, this.input);
     }
@@ -514,14 +516,12 @@ class RiMarkov {
     // but keep track of tries to avoid duplicates
     const tried = [];
     for (let i = 0, pTotal = 0; i < tries; i++) {
-      let idx = i % children.length;
+      const idx = i % children.length;
       pTotal += pdist[idx];
-      let next = children[idx];
-      if (selector < pTotal) {
-        if (!tried.includes(next.token)) {
-          tried.push(next.token);
-          return validateMlms(next, tokens) ? next : false;
-        }
+      const next = children[idx];
+      if (selector < pTotal && !tried.includes(next.token)) {
+        tried.push(next.token);
+        return validateMlms(next, tokens) ? next : false;
       }
     }
   }
@@ -559,10 +559,10 @@ class RiMarkov {
 
   /* add tokens to tree */
   treeify(tokens) {
-    let root = this.root;
+    const root = this.root;
     for (let i = 0; i < tokens.length; i++) {
       let node = root;
-      let words = tokens.slice(i, i + this.n);
+      const words = tokens.slice(i, i + this.n);
       let wrap = 0;
       for (let j = 0; j < this.n; j++) {
         let hidden = false;
@@ -582,10 +582,11 @@ class RiMarkov {
    */
   _splitEnds(str) {
 
-    let se = [...this.sentenceEnds];
-    let re = '(' + se.reduce((acc, w) => acc + w + '|', '')
+    const se = [...this.sentenceEnds];
+    const re = '(' + se.reduce((acc, w) => `${acc + w}|`, '')
       .slice(0, -1).replace(/[.*+?^${}()[\]\\]/g, '\\$&') + ")";
-    let arr = [], parts = str.split(new RegExp(re, 'g'));
+    const arr = [];
+    const parts = str.split(new RegExp(re, 'g'));
     for (let i = 0; i < parts.length; i++) {
       if (!parts[i].length) continue;
       if ((i % 2) === 0) {
@@ -602,8 +603,8 @@ class RiMarkov {
   _flatten(nodes) {
     if (!nodes || (Array.isArray(nodes) && !nodes.length)) return '';
     if (nodes.token) return nodes.token; // single-node 
-    let arr = nodes.map(n => n ? n.token : '[undef]');
-    let sent = this.untokenize(arr);
+    const arr = nodes.map(n => n ? n.token : '[undef]');
+    const sent = this.untokenize(arr);
     return sent.replace(MULTI_SP_RE, ' ');
   }
 
@@ -633,7 +634,7 @@ class Node {
     const rand = RiMarkov.parent.randomizer;
     const children = this.childNodes({ filter });
     if (!children.length) {
-      throw Error('No eligible child for "' + this.token
+      throw Error(`No eligible child for "${this.token}`
         + "\" children=[" + this.childNodes().map(t => t.token) + "]");
     }
     const weights = children.map(n => n.count);
@@ -647,19 +648,19 @@ class Node {
   isRoot() { return !this.parent; }
 
   childNodes(opts) {
-    let sort = opts && opts.sort;
-    let filter = opts && opts.filter;
+    const sort = opts && opts.sort;
+    const filter = opts && opts.filter;
     let kids = Object.values(this.children);
     if (filter) kids = kids.filter(filter);
-    if (sort) kids.sort((a, b) => b.count !== a.count
-      ? b.count - a.count
-      : b.token.localeCompare(a.token));
+    if (sort) kids.sort((a, b) => b.count === a.count
+      ? b.token.localeCompare(a.token)
+      : b.count - a.count);
     return kids;
   }
 
   childCount(ignoreHidden) {
     if (this.numChildren === -1) {
-      let opts = {};
+      const opts = {};
       if (ignoreHidden) opts.filter = (t => !t.hidden);
       this.numChildren = this.childNodes(opts)
         .reduce((a, c) => a + c.count, 0);
@@ -686,15 +687,15 @@ class Node {
   }
 
   toString() {
-    return this.parent ? '\'' + this.token + '\' [' + this.count
+    return this.parent ? `'${this.token}' [${this.count}`
       + ',p=' + this.nodeProb().toFixed(3) + ']' : 'Root'
   }
 
   asTree(sort, showHiddenNodes) {
-    let s = this.token + ' ';
-    if (this.parent) s += '(' + this.count + ')->';
+    let s = `${this.token} `;
+    if (this.parent) s += `(${this.count})->`;
     s += '{';
-    return this.childCount(true) ? stringulate(this, s, 1, sort, !showHiddenNodes) : s + '}';
+    return this.childCount(true) ? stringulate(this, s, 1, sort, !showHiddenNodes) : `${s}}`;
   }
 }
 
@@ -704,48 +705,48 @@ function stringulate(mn, str, depth, sort, ignoreHidden) {
 
   sort = sort || false;
   let indent = '\n';
-  let l = mn.childNodes({ sort: true, filter: t => !t.hidden });
+  const l = mn.childNodes({ sort: true, filter: t => !t.hidden });
   if (!l.length) return str;
   for (let j = 0; j < depth; j++) indent += "  ";
   for (let i = 0; i < l.length; i++) {
-    let node = l[i];
+    const node = l[i];
     if (node && node.token) {
-      str += indent + "'" + encode(node.token) + "'";
-      if (!node.isRoot()) str += " [" + node.count
+      str += `${indent}'${encode(node.token)}'`;
+      if (!node.isRoot()) str += ` [${node.count}`
         + ",p=" + node.nodeProb().toFixed(3) + "]";
       if (!node.isLeaf(ignoreHidden)) {
         //console.log('appending "{" for '+node.token, node.childNodes());
         str += '  {';
       }
-      str = mn.childCount(ignoreHidden) ? stringulate(node, str, depth + 1, sort) : str + '}';
+      str = mn.childCount(ignoreHidden) ? stringulate(node, str, depth + 1, sort) : `${str}}`;
     }
   }
   indent = '\n';
   for (let j = 0; j < depth - 1; j++) indent += "  ";
-  return str + indent + "}";
+  return `${str + indent}}`;
 }
 
 function encode(tok) {
   if (tok === '\n') tok = '\\n';
   if (tok === '\r') tok = '\\r';
   if (tok === '\t') tok = '\\t';
-  if (tok === '\r\n') tok = '\\r\\n';
+  if (tok === '\r\n') return '\\r\\n';
   return tok;
 }
 
 function populate(objNode, jsonNode) {
   if (!jsonNode) return;
-  let children = Object.values(jsonNode.children);
+  const children = Object.values(jsonNode.children);
   for (let i = 0; i < children.length; i++) {
-    let child = children[i];
-    let newNode = objNode.addChild(child.token, child.count);
+    const child = children[i];
+    const newNode = objNode.addChild(child.token, child.count);
     populate(newNode, child); // recurse
   }
 }
 
 function throwError(tries, oks) {
-  throw Error('Failed after ' + tries + ' tries'
-    + (oks ? ' and ' + oks + ' successes' : '')
+  throw Error(`Failed after ${tries} tries`
+    + (oks ? ` and ${oks} successes` : '')
     + ', you may need to adjust options or add more text');
 }
 

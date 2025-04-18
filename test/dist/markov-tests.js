@@ -717,8 +717,7 @@ describe("Markov", function() {
   function distribution(res, dump) {
     let dist = {};
     for (var i = 0; i < res.length; i++) {
-      if (!dist[res[i]])
-        dist[res[i]] = 0;
+      if (!dist[res[i]]) dist[res[i]] = 0;
       dist[res[i]]++;
     }
     let keys = Object.keys(dist);

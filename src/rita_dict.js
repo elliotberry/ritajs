@@ -1,4 +1,3 @@
-  
 /** @type {object} */
 export default {
   "a": ["ey1", "dt"],

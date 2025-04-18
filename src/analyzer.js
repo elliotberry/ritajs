@@ -1,7 +1,8 @@
 import Util from "./util.js";
 import LetterToSound from "./rita_lts.js";
 
-const SP = ' ', E = '';
+const SP = ' ';
+const E = '';
 
 /**
  * @class Analyzer
@@ -16,9 +17,9 @@ class Analyzer {
   }
 
   analyze(text, opts) {
-    let words = this.RiTa.tokenizer.tokenize(text);
-    let tags = this.RiTa.pos(text, opts); // tags are not cached
-    let features = {
+    const words = this.RiTa.tokenizer.tokenize(text);
+    const tags = this.RiTa.pos(text, opts); // tags are not cached
+    const features = {
       phones: E,
       stresses: E,
       syllables: E,
@@ -44,7 +45,8 @@ class Analyzer {
 
   phonesToStress(phones) {
     if (!phones) return;
-    let stress = E, syls = phones.split(SP);
+    let stress = E;
+    const syls = phones.split(SP);
     for (let j = 0; j < syls.length; j++) {
       if (!syls[j].length) continue;
       stress += syls[j].includes('1') ? '1' : '0';
@@ -59,29 +61,34 @@ class Analyzer {
     let result = this.RiTa.CACHING && this.cache[word];
     if (typeof result === 'undefined') {
 
-      let slash = '/', delim = '-';
-      let lex = this.RiTa.lexicon
-      let phones = word, syllables = word, stresses = word;
-      let rawPhones = lex.rawPhones(word, { noLts: true })
+      const slash = '/';
+      const delim = '-';
+      const lex = this.RiTa.lexicon
+      let phones = word;
+      let syllables = word;
+      let stresses = word;
+      const rawPhones = lex.rawPhones(word, { noLts: true })
         || this._computeRawPhones(word, lex, opts);
 
       if (rawPhones) {
 
         // compute phones, syllables and stresses
         if (typeof rawPhones === 'string') {
-          let sp = rawPhones.replace(/1/g, E).replace(/ /g, delim) + SP;
+          const sp = rawPhones.replace(/1/g, E).replace(/ /g, delim) + SP;
           phones = (sp === 'dh ') ? 'dh-ah ' : sp; // special case
-          let ss = rawPhones.replace(/ /g, slash).replace(/1/g, E) + SP;
+          const ss = rawPhones.replace(/ /g, slash).replace(/1/g, E) + SP;
           syllables = (ss === 'dh ') ? 'dh-ah ' : ss;
           stresses = this.phonesToStress(rawPhones);
         }
         else {
           // hyphenated #HWF
-          let ps = [], syls = [], strs = [];
+          const ps = [];
+          const syls = [];
+          const strs = [];
           rawPhones.forEach(p => {
-            let sp = p.replace(/1/g, E).replace(/ /g, delim);
+            const sp = p.replace(/1/g, E).replace(/ /g, delim);
             ps.push((sp === 'dh ') ? 'dh-ah ' : sp); // special case
-            let ss = p.replace(/ /g, slash).replace(/1/g, E);
+            const ss = p.replace(/ /g, slash).replace(/1/g, E);
             syls.push((ss === 'dh ') ? 'dh-ah ' : ss);
             strs.push(this.phonesToStress(p));
           });
@@ -110,9 +117,9 @@ class Analyzer {
 
   //#HWF
   _computePhonesHyph(word, lex, opts) {
-    let rawPhones = [];
+    const rawPhones = [];
     word.split("-").forEach(p => {
-      let part = this._computePhonesWord(p, lex, opts, true);
+      const part = this._computePhonesWord(p, lex, opts, true);
       if (part && part.length > 0) rawPhones.push(part);
     });
     return rawPhones;
@@ -120,27 +127,28 @@ class Analyzer {
 
   //#HWF this part is unchanged but move to a separated function
   _computePhonesWord(word, lex, opts, isPart) {
-    let rawPhones, RiTa = this.RiTa;
+    let rawPhones;
+    const RiTa = this.RiTa;
     if (isPart) rawPhones = lex.rawPhones(word, { noLts: true });
     // if its a simple plural ending in 's',
     // and the singular is in the lexicon, add '-z' to end
     if (!rawPhones && word.endsWith('s')) {
-      let sing = RiTa.singularize(word);
+      const sing = RiTa.singularize(word);
       rawPhones = lex.rawPhones(sing, { noLts: true });
-      rawPhones && (rawPhones += '-z'); // add 's' phone
+      if (rawPhones) rawPhones += '-z'; // add 's' phone
     }
 
     // TODO: what about verb forms here?? Need test cases
-    let silent = RiTa.SILENT || RiTa.SILENCE_LTS || (opts && opts.silent);
+    const silent = RiTa.SILENT || RiTa.SILENCE_LTS || (opts && opts.silent);
 
     // if no phones yet, try the lts-engine
     if (!rawPhones) {
-      let ltsPhones = this.computePhones(word, opts);
+      const ltsPhones = this.computePhones(word, opts);
       if (ltsPhones && ltsPhones.length) {
         if (!silent && lex.size()) {// && word.match(HAS_LETTER_RE)) {
-          console.log("[RiTa] Used LTS-rules for '" + word + "'");
+          console.log(`[RiTa] Used LTS-rules for '${word}'`);
         }
-        rawPhones = Util.syllablesFromPhones(ltsPhones);
+        return Util.syllablesFromPhones(ltsPhones);
       }
     }
 
