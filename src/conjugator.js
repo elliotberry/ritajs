@@ -17,12 +17,12 @@ class RegularExpression {
     return this.truncate(word) + this.suffix
   }
 
-  truncate(word) {
-    return this.offset === 0 ? word : word.substr(0, word.length - this.offset)
-  }
-
   toString() {
     return `/${this.raw}/`
+  }
+
+  truncate(word) {
+    return this.offset === 0 ? word : word.slice(0, Math.max(0, word.length - this.offset))
   }
 }
 
@@ -44,10 +44,245 @@ class Conjugator {
     this.verbsEndingInDouble = this.allVerbs.filter((v) => /([^])\1$/.test(v))
   }
 
+  _checkRules(ruleSet, theVerb) {
+    if (!theVerb || theVerb.length === 0) return ""
+
+    theVerb = theVerb.trim()
+
+    const dbug = 0
+    let res
+    const name = ruleSet.name
+    const rules = ruleSet.rules
+    const defRule = ruleSet.defaultRule
+
+    if (!rules) console.error(`no rule: ${ruleSet.name} of ${theVerb}`)
+    if (MODALS.has(theVerb)) return theVerb
+
+    for (const [index, rule] of rules.entries()) {
+      dbug && console.log(`checkRules(${name}).fire(${index})=${rule.regex}`)
+      if (rule.applies(theVerb)) {
+        const got = rule.fire(theVerb)
+        dbug &&
+          console.log(
+            `HIT(${name}).fire(${index})=${rule.regex}_returns: ${got}`
+          )
+        return got
+      }
+    }
+    dbug && console.log("NO HIT!")
+    if (ruleSet.doubling && VERB_CONS_DOUBLING.includes(theVerb)) {
+      dbug && console.log("doDoubling!")
+      theVerb = this._doubleFinalConsonant(theVerb)
+    }
+
+    res = defRule.fire(theVerb)
+    dbug && console.log(`checkRules(${name}).returns: ${res}`)
+
+    return res
+  }
+
+  _doubleFinalConsonant(word) {
+    return word + word.charAt(word.length - 1)
+  }
+
+  _handleStem = function (word) {
+    if (
+      this.RiTa.lexicon.data.hasOwnProperty(word) &&
+      this.RiTa.tagger.allTags(word).includes("vb")
+    ) {
+      return word
+    }
+
+    let w = word
+    const allVerb = this.allVerbs
+    while (w.length > 1) {
+      const pattern = new RegExp(`^${w}`)
+      const guess = allVerb.filter((item) => pattern.test(item))
+      if (!guess || guess.length === 0) {
+        w = w.slice(0, -1)
+        continue
+      }
+      // always look for shorter words first
+      guess.sort((a, b) => a.length - b.length)
+
+      // look for words (a===b or stem(b)===a) first
+      for (const element of guess) {
+        if (word === element) return word
+        if (this.RiTa.stem(element) === word) return element
+        if (this.unconjugate(this.RiTa.stem(element)) === word) return element
+      }
+
+      w = w.slice(0, -1)
+    }
+
+    // can't find possible word in dict, return original
+    return word
+  }
+
+  _isPastParticiple(word) {
+    const w = word.toLowerCase()
+    const lex = this.RiTa.lexicon
+    const posArray = lex._posArr(w)
+
+    // in dict?
+    if (posArray && posArray.includes("vbn")) return true
+
+    // is irregular?
+    if (IRREG_PAST_PART.includes(w)) return true
+
+    // ends with ed?
+    if (w.endsWith("ed")) {
+      let pos =
+        lex._posArr(w.slice(0, Math.max(0, w.length - 1))) || // created
+        lex._posArr(w.slice(0, Math.max(0, w.length - 2))) // played
+
+      if (!pos && w.charAt(w.length - 3) === w.charAt(w.length - 4)) {
+        pos = lex._posArr(w.slice(0, Math.max(0, w.length - 3))) // hopped
+      }
+      if (!pos && w.endsWith("ied")) {
+        pos = lex._posArr(`${w.slice(0, Math.max(0, w.length - 3))}y`) // cried
+      }
+      if (pos && pos.includes("vb")) return true
+    }
+
+    // ends with en?
+    if (w.endsWith("en")) {
+      let pos =
+        lex._posArr(w.slice(0, Math.max(0, w.length - 1))) || // arisen
+        lex._posArr(w.slice(0, Math.max(0, w.length - 2))) // eaten
+
+      if (!pos && w.charAt(w.length - 3) === w.charAt(w.length - 4)) {
+        // forgotten / bitten ... (past tense + en)?
+        pos = lex._posArr(w.slice(0, Math.max(0, w.length - 3)))
+      }
+      if (pos && (pos.includes("vb") || pos.includes("vbd"))) return true
+
+      // special cases
+      const stem = w.slice(0, Math.max(0, w.length - 2))
+      if (/^(writt|ridd|chidd|swoll)$/.test(stem)) return true
+    }
+
+    // ends with n, d, or t?
+    if (/[ndt]$/.test(w) && Object.keys(IRREG_VERBS_LEX).includes(w)) {
+      // grown, thrown, heard, learnt...
+      // start, bust...
+      const pos = lex._posArr(w.slice(0, Math.max(0, w.length - 1)))
+      if (pos && pos.includes("vb")) return true
+    }
+
+    return false
+  }
+
+  _parseArgs(arguments_) {
+    this._reset()
+
+    const RiTa = this.RiTa
+    if (typeof arguments_ === "string") {
+      if (/^[123][SP](Pr|Pa|Fu)$/.test(arguments_)) {
+        const options = {}
+        options.person = Number.parseInt(arguments_[0])
+        options.number = arguments_[1] === "S" ? RiTa.SINGULAR : RiTa.PLURAL
+        const tense = arguments_.slice(2)
+        if (tense === "Pr") options.tense = RiTa.PRESENT
+        if (tense === "Fu") options.tense = RiTa.FUTURE
+        if (tense === "Pa") options.tense = RiTa.PAST
+        arguments_ = options
+      } else {
+        throw new Error(`Invalid args: ${arguments_}`)
+      }
+    }
+
+    if (arguments_.number) this.number = arguments_.number
+    if (arguments_.person) this.person = arguments_.person
+    if (arguments_.tense) this.tense = arguments_.tense
+    if (arguments_.form) this.form = arguments_.form
+    if (arguments_.passive) this.passive = arguments_.passive
+    if (arguments_.progressive) this.progressive = arguments_.progressive
+    if (arguments_.interrogative) this.interrogative = arguments_.interrogative
+    if (arguments_.perfect) this.perfect = arguments_.perfect
+  }
+
+  /////////////////////////////// End API ///////////////////////////////////
+
+  _pastTense(theVerb, pers, numb) {
+    const RiTa = this.RiTa
+    if (theVerb.toLowerCase() === "be") {
+      switch (numb) {
+        case RiTa.SINGULAR: {
+          switch (pers) {
+            case RiTa.FIRST: {
+              break
+            }
+            case RiTa.THIRD: {
+              return "was"
+            }
+            case RiTa.SECOND: {
+              return "were"
+            }
+          }
+          break
+        }
+        case RiTa.PLURAL: {
+          return "were"
+        }
+      }
+    }
+    return this._checkRules(PAST_RULESET, theVerb)
+  }
+
+  _presentTense(theVerb, person, number) {
+    person = person || this.person
+    number = number || this.number
+    const RiTa = this.RiTa
+    if (person === RiTa.THIRD && number === RiTa.SINGULAR) {
+      return this._checkRules(PRESENT_RULESET, theVerb)
+    } else if (theVerb === "be") {
+      if (number === RiTa.SINGULAR) {
+        switch (person) {
+          case RiTa.FIRST: {
+            return "am"
+          }
+          case RiTa.SECOND: {
+            return "are"
+          }
+          case RiTa.THIRD: {
+            return "is"
+          }
+        }
+      } else {
+        return "are"
+      }
+    }
+    return theVerb
+  }
+
+  _reset() {
+    this.IRREG_VERBS_LEX_VB = IRREG_VERBS_LEX // for tagger
+    this.IRREG_VERBS_NOLEX = IRREG_VERBS_NOLEX // for tagger
+    this.IRREG_PAST_PART = IRREG_PAST_PART // for tagger
+    this.perfect = this.progressive = this.passive = this.interrogative = false
+    this.tense = this.RiTa.PRESENT
+    this.person = this.RiTa.FIRST
+    this.number = this.RiTa.SINGULAR
+    this.form = this.RiTa.NORMAL
+  }
+
+  _verbForm(theVerb, tense, person, number) {
+    switch (tense) {
+      case this.RiTa.PRESENT: {
+        return this._presentTense(theVerb, person, number)
+      }
+      case this.RiTa.PAST: {
+        return this._pastTense(theVerb, person, number)
+      }
+    }
+    return theVerb
+  }
+
   // TODO: add handling of past tense modals.
-  conjugate(verb, args) {
-    if (!verb || !verb.length) throw Error("No verb")
-    if (!args) return verb
+  conjugate(verb, arguments_) {
+    if (!verb || verb.length === 0) throw new Error("No verb")
+    if (!arguments_) return verb
 
     verb = verb.toLowerCase()
 
@@ -55,10 +290,10 @@ class Conjugator {
     if (!this.RiTa.tagger.allTags(verb).includes("vb")) {
       verb = this.unconjugate(verb) || verb
     }
-    args = this._parseArgs(args)
+    arguments_ = this._parseArgs(arguments_)
 
     // handle 'to be' verbs and stemming
-    let frontVG = TO_BE.includes(verb) ? "be" : this._handleStem(verb)
+    let frontVG = TO_BE.has(verb) ? "be" : this._handleStem(verb)
 
     let actualModal
     let verbForm
@@ -93,7 +328,7 @@ class Conjugator {
       if (this.form === RiTa.GERUND) {
         // gerund - use ING form
         conjs.push(this.presentPart(frontVG))
-      } else if (this.interrogative && frontVG != "be" && conjs.length < 1) {
+      } else if (this.interrogative && frontVG != "be" && conjs.length === 0) {
         conjs.push(frontVG)
       } else {
         verbForm = this._verbForm(frontVG, this.tense, this.person, this.number)
@@ -104,15 +339,52 @@ class Conjugator {
     // add modal, and we're done
     actualModal && conjs.push(actualModal)
 
-    return conjs.reduce((acc, cur) => `${cur} ${acc}`).trim()
+    return conjs.reduce((accumulator, current) => `${current} ${accumulator}`).trim()
   }
 
-  unconjugate(word, opts = {}) {
+  pastPart(theVerb) {
+    if (this._isPastParticiple(theVerb)) return theVerb
+    return this._checkRules(PAST_PART_RULESET, theVerb)
+  }
+
+  presentPart(theVerb) {
+    return theVerb === "be" ? "being" : (
+        this._checkRules(PRESENT_PART_RULESET, theVerb)
+      )
+  }
+
+  toString() {
+    return (
+      `  ---------------------\n  Passive = ${this.passive}` +
+      "\n" +
+      "  Perfect = " +
+      this.perfect +
+      "\n" +
+      "  Progressive = " +
+      this.progressive +
+      "\n" +
+      "  ---------------------" +
+      "\n" +
+      "  Number = " +
+      this.number +
+      "\n" +
+      "  Person = " +
+      this.person +
+      "\n" +
+      "  Tense = " +
+      this.tense +
+      "\n" +
+      "  ---------------------" +
+      "\n"
+    )
+  }
+
+  unconjugate(word, options = {}) {
     // NAPI (perhaps should be added?)
 
     if (typeof word !== "string") return
 
-    const dbug = opts && opts.dbug
+    const dbug = options && options.dbug
 
     if (IRREG_VERBS_LEX.hasOwnProperty(word)) {
       dbug && console.log(`${word} in exceptions1 (in lex)`)
@@ -133,7 +405,7 @@ class Conjugator {
     const tags = this.RiTa.tagger.allTags(word, { noGuessing: true })
 
     // if its already a base form verb, return it
-    if (tags.some((t) => t === "vb")) {
+    if (tags.includes("vb")) {
       dbug && console.log(`${word} is a base form verb`)
       return word
     }
@@ -215,268 +487,6 @@ class Conjugator {
 
     dbug && console.log(`'${word}' hit no rules`)
 
-    return word
-  }
-
-  presentPart(theVerb) {
-    return theVerb === "be" ? "being" : (
-        this._checkRules(PRESENT_PART_RULESET, theVerb)
-      )
-  }
-
-  pastPart(theVerb) {
-    if (this._isPastParticiple(theVerb)) return theVerb
-    return this._checkRules(PAST_PART_RULESET, theVerb)
-  }
-
-  toString() {
-    return (
-      `  ---------------------\n  Passive = ${this.passive}` +
-      "\n" +
-      "  Perfect = " +
-      this.perfect +
-      "\n" +
-      "  Progressive = " +
-      this.progressive +
-      "\n" +
-      "  ---------------------" +
-      "\n" +
-      "  Number = " +
-      this.number +
-      "\n" +
-      "  Person = " +
-      this.person +
-      "\n" +
-      "  Tense = " +
-      this.tense +
-      "\n" +
-      "  ---------------------" +
-      "\n"
-    )
-  }
-
-  /////////////////////////////// End API ///////////////////////////////////
-
-  _reset() {
-    this.IRREG_VERBS_LEX_VB = IRREG_VERBS_LEX // for tagger
-    this.IRREG_VERBS_NOLEX = IRREG_VERBS_NOLEX // for tagger
-    this.IRREG_PAST_PART = IRREG_PAST_PART // for tagger
-    this.perfect = this.progressive = this.passive = this.interrogative = false
-    this.tense = this.RiTa.PRESENT
-    this.person = this.RiTa.FIRST
-    this.number = this.RiTa.SINGULAR
-    this.form = this.RiTa.NORMAL
-  }
-
-  _parseArgs(args) {
-    this._reset()
-
-    const RiTa = this.RiTa
-    if (typeof args === "string") {
-      if (/^[123][SP](Pr|Pa|Fu)$/.test(args)) {
-        const opts = {}
-        opts.person = parseInt(args[0])
-        opts.number = args[1] === "S" ? RiTa.SINGULAR : RiTa.PLURAL
-        const tense = args.substr(2)
-        if (tense === "Pr") opts.tense = RiTa.PRESENT
-        if (tense === "Fu") opts.tense = RiTa.FUTURE
-        if (tense === "Pa") opts.tense = RiTa.PAST
-        args = opts
-      } else {
-        throw Error(`Invalid args: ${args}`)
-      }
-    }
-
-    if (args.number) this.number = args.number
-    if (args.person) this.person = args.person
-    if (args.tense) this.tense = args.tense
-    if (args.form) this.form = args.form
-    if (args.passive) this.passive = args.passive
-    if (args.progressive) this.progressive = args.progressive
-    if (args.interrogative) this.interrogative = args.interrogative
-    if (args.perfect) this.perfect = args.perfect
-  }
-
-  _checkRules(ruleSet, theVerb) {
-    if (!theVerb || !theVerb.length) return ""
-
-    theVerb = theVerb.trim()
-
-    const dbug = 0
-    let res
-    const name = ruleSet.name
-    const rules = ruleSet.rules
-    const defRule = ruleSet.defaultRule
-
-    if (!rules) console.error(`no rule: ${ruleSet.name} of ${theVerb}`)
-    if (MODALS.includes(theVerb)) return theVerb
-
-    for (let i = 0; i < rules.length; i++) {
-      dbug && console.log(`checkRules(${name}).fire(${i})=${rules[i].regex}`)
-      if (rules[i].applies(theVerb)) {
-        const got = rules[i].fire(theVerb)
-        dbug &&
-          console.log(
-            `HIT(${name}).fire(${i})=${rules[i].regex}_returns: ${got}`
-          )
-        return got
-      }
-    }
-    dbug && console.log("NO HIT!")
-    if (ruleSet.doubling && VERB_CONS_DOUBLING.includes(theVerb)) {
-      dbug && console.log("doDoubling!")
-      theVerb = this._doubleFinalConsonant(theVerb)
-    }
-
-    res = defRule.fire(theVerb)
-    dbug && console.log(`checkRules(${name}).returns: ${res}`)
-
-    return res
-  }
-
-  _doubleFinalConsonant(word) {
-    return word + word.charAt(word.length - 1)
-  }
-
-  _isPastParticiple(word) {
-    const w = word.toLowerCase()
-    const lex = this.RiTa.lexicon
-    const posArr = lex._posArr(w)
-
-    // in dict?
-    if (posArr && posArr.includes("vbn")) return true
-
-    // is irregular?
-    if (IRREG_PAST_PART.includes(w)) return true
-
-    // ends with ed?
-    if (w.endsWith("ed")) {
-      let pos =
-        lex._posArr(w.substring(0, w.length - 1)) || // created
-        lex._posArr(w.substring(0, w.length - 2)) // played
-
-      if (!pos && w.charAt(w.length - 3) === w.charAt(w.length - 4)) {
-        pos = lex._posArr(w.substring(0, w.length - 3)) // hopped
-      }
-      if (!pos && w.endsWith("ied")) {
-        pos = lex._posArr(`${w.substring(0, w.length - 3)}y`) // cried
-      }
-      if (pos && pos.includes("vb")) return true
-    }
-
-    // ends with en?
-    if (w.endsWith("en")) {
-      let pos =
-        lex._posArr(w.substring(0, w.length - 1)) || // arisen
-        lex._posArr(w.substring(0, w.length - 2)) // eaten
-
-      if (!pos && w.charAt(w.length - 3) === w.charAt(w.length - 4)) {
-        // forgotten / bitten ... (past tense + en)?
-        pos = lex._posArr(w.substring(0, w.length - 3))
-      }
-      if (pos && (pos.includes("vb") || pos.includes("vbd"))) return true
-
-      // special cases
-      const stem = w.substring(0, w.length - 2)
-      if (/^(writt|ridd|chidd|swoll)$/.test(stem)) return true
-    }
-
-    // ends with n, d, or t?
-    if (/[ndt]$/.test(w) && Object.keys(IRREG_VERBS_LEX).includes(w)) {
-      // grown, thrown, heard, learnt...
-      // start, bust...
-      const pos = lex._posArr(w.substring(0, w.length - 1))
-      if (pos && pos.includes("vb")) return true
-    }
-
-    return false
-  }
-
-  _pastTense(theVerb, pers, numb) {
-    const RiTa = this.RiTa
-    if (theVerb.toLowerCase() === "be") {
-      switch (numb) {
-        case RiTa.SINGULAR:
-          switch (pers) {
-            case RiTa.FIRST:
-              break
-            case RiTa.THIRD:
-              return "was"
-            case RiTa.SECOND:
-              return "were"
-          }
-          break
-        case RiTa.PLURAL:
-          return "were"
-      }
-    }
-    return this._checkRules(PAST_RULESET, theVerb)
-  }
-
-  _presentTense(theVerb, person, number) {
-    person = person || this.person
-    number = number || this.number
-    const RiTa = this.RiTa
-    if (person === RiTa.THIRD && number === RiTa.SINGULAR) {
-      return this._checkRules(PRESENT_RULESET, theVerb)
-    } else if (theVerb === "be") {
-      if (number === RiTa.SINGULAR) {
-        switch (person) {
-          case RiTa.FIRST:
-            return "am"
-          case RiTa.SECOND:
-            return "are"
-          case RiTa.THIRD:
-            return "is"
-        }
-      } else {
-        return "are"
-      }
-    }
-    return theVerb
-  }
-
-  _verbForm(theVerb, tense, person, number) {
-    switch (tense) {
-      case this.RiTa.PRESENT:
-        return this._presentTense(theVerb, person, number)
-      case this.RiTa.PAST:
-        return this._pastTense(theVerb, person, number)
-    }
-    return theVerb
-  }
-
-  _handleStem = function (word) {
-    if (
-      this.RiTa.lexicon.data.hasOwnProperty(word) &&
-      this.RiTa.tagger.allTags(word).includes("vb")
-    ) {
-      return word
-    }
-
-    let w = word
-    const allVerb = this.allVerbs
-    while (w.length > 1) {
-      const pattern = new RegExp(`^${w}`)
-      const guess = allVerb.filter((item) => pattern.test(item))
-      if (!guess || guess.length < 1) {
-        w = w.slice(0, -1)
-        continue
-      }
-      // always look for shorter words first
-      guess.sort((a, b) => a.length - b.length)
-
-      // look for words (a===b or stem(b)===a) first
-      for (let i = 0; i < guess.length; i++) {
-        if (word === guess[i]) return word
-        if (this.RiTa.stem(guess[i]) === word) return guess[i]
-        if (this.unconjugate(this.RiTa.stem(guess[i])) === word) return guess[i]
-      }
-
-      w = w.slice(0, -1)
-    }
-
-    // can't find possible word in dict, return original
     return word
   }
 }
@@ -1168,6 +1178,7 @@ const IRREG_VERBS_LEX = {
   repelling: "repel",
   replied: "reply",
   resetting: "reset",
+  resold: "resell",
   retaken: "retake",
   rethought: "rethink",
   retook: "retake",
@@ -1192,7 +1203,6 @@ const IRREG_VERBS_LEX = {
   risen: "rise",
   rivalled: "rival",
   rivalling: "rival",
-  resold: "resell",
   robbed: "rob",
   robbing: "rob",
   rode: "ride",
@@ -1578,12 +1588,12 @@ const IRREG_VERBS_NOLEX = {
   blabbing: "blab",
   bobbed: "bob",
   bobbing: "bob",
-  "bogged-down": "bog-down",
   bogged_down: "bog_down",
-  "bogging-down": "bog-down",
+  "bogged-down": "bog-down",
   bogging_down: "bog_down",
-  "bogs-down": "bog-down",
+  "bogging-down": "bog-down",
   bogs_down: "bog_down",
+  "bogs-down": "bog-down",
   "booby-trapped": "booby-trap",
   "booby-trapping": "booby-trap",
   "bottle-fed": "bottle-feed",
@@ -1943,10 +1953,10 @@ const IRREG_VERBS_NOLEX = {
 }
 
 const CONS = "[bcdfghjklmnpqrstvwxyz]"
-const MODALS = ["shall", "would", "may", "might", "ought", "should"]
+const MODALS = new Set(["shall", "would", "may", "might", "ought", "should"])
 const VERBAL_PREFIX =
   "((be|with|pre|un|over|re|mis|under|out|up|fore|for|counter|co|sub)(-?))"
-const ANY_STEM_RE = "^((\\w+)(-\\w+)*)(\\s((\\w+)(-\\w+)*))*$"
+const ANY_STEM_RE = String.raw`^((\w+)(-\w+)*)(\s((\w+)(-\w+)*))*$`
 
 const ING_FORM_RULES = [
   RE(`${CONS}ie$`, 2, "ying", 1),
@@ -3446,34 +3456,34 @@ const VERB_CONS_DOUBLING = [
 ]
 
 const PAST_PART_RULESET = {
-  name: "PAST_PARTICIPLE",
   defaultRule: RE(ANY_STEM_RE, 0, "ed", 2),
-  rules: PAST_PART_RULES,
-  doubling: true
+  doubling: true,
+  name: "PAST_PARTICIPLE",
+  rules: PAST_PART_RULES
 }
 
 const PRESENT_PART_RULESET = {
-  name: "ING_FORM",
   defaultRule: RE(ANY_STEM_RE, 0, "ing", 2),
-  rules: ING_FORM_RULES,
-  doubling: true
+  doubling: true,
+  name: "ING_FORM",
+  rules: ING_FORM_RULES
 }
 
 const PAST_RULESET = {
-  name: "PAST",
   defaultRule: RE(ANY_STEM_RE, 0, "ed", 2),
-  rules: PAST_RULES,
-  doubling: true
+  doubling: true,
+  name: "PAST",
+  rules: PAST_RULES
 }
 
 const PRESENT_RULESET = {
-  name: "PRESENT",
   defaultRule: RE(ANY_STEM_RE, 0, "s", 2),
-  rules: PRESENT_RULES,
-  doubling: false
+  doubling: false,
+  name: "PRESENT",
+  rules: PRESENT_RULES
 }
 
-const TO_BE = ["am", "are", "is", "was", "were"]
+const TO_BE = new Set(["am", "are", "is", "was", "were"])
 
 const IRREG_PAST_PART = [
   "done",

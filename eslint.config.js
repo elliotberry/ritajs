@@ -9,15 +9,16 @@ export default [
     files: ["**/*.js"],
     languageOptions: {
       ecmaVersion: 2024,
-      sourceType: "module"
+      sourceType: "module",
+      globals: {
+        process: false,
+        require: false,
+        console: false,
+        request: false,
+        URL: false
+      }
     },
-    globals: {
-      process: false,
-      require: false,
-      console: false,
-      request: false,
-      URL: false
-    },
+
     plugins: {
       perfectionist,
       "simple-import-sort": is
