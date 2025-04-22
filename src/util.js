@@ -2,63 +2,46 @@
  * @class Util
  * @memberof module:rita
  */
-class Util {
-  // Takes a syllabification and turns it into a string of phonemes,
-  // delimited with dashes, with spaces between syllables
-  static syllablesToPhones(syllables) {
-    let i
-    let j
-    const ret = []
-    for (i = 0; i < syllables.length; i++) {
-      const syl = syllables[i]
-      const stress = syl[0][0]
-      const onset = syl[1]
-      const nucleus = syl[2]
-      const coda = syl[3]
+const Utility = {
+  isNum(n) {
+    return !isNaN(Number.parseFloat(n)) && isFinite(n)
+  },
 
-      if (stress && nucleus.length) nucleus[0] += stress
+  numOpt(options, name, def = 0) {
+    return Utility.isNum(options?.[name]) ? options[name] : def
+  },
 
-      const data = []
-      for (j = 0; j < onset.length; j++) data.push(onset[j])
-      for (j = 0; j < nucleus.length; j++) data.push(nucleus[j])
-      for (j = 0; j < coda.length; j++) data.push(coda[j])
-      ret.push(data.join("-"))
-    }
-
-    return ret.join(" ")
-  }
-
-  static syllablesFromPhones(input) {
+  syllablesFromPhones(input) {
     // adapted from FreeTTS
 
     function extend(l1, l2) {
-      for (let i = 0; i < l2.length; i++) l1.push(l2[i])
+      for (let index = 0; index < l2.length; index++) l1.push(l2[index])
     }
 
-    if (!input || !input.length) return ""
+    if (!input || input.length === 0) return ""
 
     let dbug
     let internuclei = []
     const syllables = [] // returned data structure
     const sylls = typeof input == "string" ? input.split("-") : input
 
-    for (let i = 0; i < sylls.length; i++) {
-      let phoneme = sylls[i].trim()
+    for (const [index, syll] of sylls.entries()) {
+      let phoneme = syll.trim()
       let stress
-      if (!phoneme.length) continue
+      if (phoneme.length === 0) continue
 
       const last = phoneme.charAt(phoneme.length - 1)
       if (this.isNum(last)) {
         stress = last
-        phoneme = phoneme.substring(0, phoneme.length - 1)
+        phoneme = phoneme.slice(0, Math.max(0, phoneme.length - 1))
       }
 
       if (dbug)
         console.log(
-          `${i})${phoneme} stress=${stress} inter=${internuclei.join(":")}`
+          `${index})${phoneme} stress=${stress} inter=${internuclei.join(":")}`
         )
 
-      if (Util.Phones.vowels.includes(phoneme)) {
+      if (Utility.Phones.vowels.includes(phoneme)) {
         // Split the consonants seen since the last nucleus into coda and onset.
         let coda
         let onset
@@ -66,7 +49,7 @@ class Util {
         // Make the largest onset we can. The 'split' variable marks the break point.
         for (let split = 0; split < internuclei.length + 1; split++) {
           coda = internuclei.slice(0, split)
-          onset = internuclei.slice(split, internuclei.length)
+          onset = internuclei.slice(split)
 
           if (dbug)
             console.log(
@@ -81,7 +64,7 @@ class Util {
           // (in which case an invalid onset is better than a coda that doesn't follow
           // a nucleus), or if we've gone through all of the onsets and we didn't find
           // any that are valid, then split the nonvowels we've seen at this location.
-          const bool = Util.Phones.onsets.includes(onset.join(" "))
+          const bool = Utility.Phones.onsets.includes(onset.join(" "))
           if (bool || syllables.length === 0 || onset.length === 0) {
             if (dbug) console.log(`  break ${phoneme}`)
             break
@@ -91,13 +74,13 @@ class Util {
         // Tack the coda onto the coda of the last syllable.
         // Can't do it if this is the first syllable.
         if (syllables.length > 0) {
-          extend(syllables[syllables.length - 1][3], coda)
+          extend(syllables.at(-1)[3], coda)
           if (dbug)
             console.log(
               `  tack: ${coda} -> len=` +
-                syllables[syllables.length - 1][3].length +
+                syllables.at(-1)[3].length +
                 " [" +
-                syllables[syllables.length - 1][3] +
+                syllables.at(-1)[3] +
                 "]"
             )
         }
@@ -108,8 +91,8 @@ class Util {
 
         // At this point we've processed the internuclei list.
         internuclei = []
-      } else if (!Util.Phones.consonants.includes(phoneme) && phoneme != " ") {
-        throw Error(`Invalid phoneme: ${phoneme}`)
+      } else if (!Utility.Phones.consonants.includes(phoneme) && phoneme != " ") {
+        throw new Error(`Invalid phoneme: ${phoneme}`)
       } else {
         // a consonant
         internuclei.push(phoneme)
@@ -122,20 +105,37 @@ class Util {
       if (syllables.length === 0) {
         syllables.push([[undefined], internuclei, [], []])
       } else {
-        extend(syllables[syllables.length - 1][3], internuclei)
+        extend(syllables.at(-1)[3], internuclei)
       }
     }
-    return Util.syllablesToPhones(syllables)
-  }
+    return Utility.syllablesToPhones(syllables)
+  },
 
-  static isNum(n) {
-    return !isNaN(parseFloat(n)) && isFinite(n)
-  }
+  // Takes a syllabification and turns it into a string of phonemes,
+  // delimited with dashes, with spaces between syllables
+  syllablesToPhones(syllables) {
+    let index
+    let index_
+    const returnValue = []
+    for (index = 0; index < syllables.length; index++) {
+      const syl = syllables[index]
+      const stress = syl[0][0]
+      const onset = syl[1]
+      const nucleus = syl[2]
+      const coda = syl[3]
 
-  static numOpt(opts, name, def = 0) {
-    return Util.isNum(opts?.[name]) ? opts[name] : def
-  }
-}
+      if (stress && nucleus.length > 0) nucleus[0] += stress
+
+      const data = []
+      for (index_ = 0; index_ < onset.length; index_++) data.push(onset[index_])
+      for (index_ = 0; index_ < nucleus.length; index_++) data.push(nucleus[index_])
+      for (index_ = 0; index_ < coda.length; index_++) data.push(coda[index_])
+      returnValue.push(data.join("-"))
+    }
+
+    return returnValue.join(" ")
+  },
+};
 
 // CLASSES ////////////////////////////////////////////////////
 
@@ -159,57 +159,49 @@ class RE {
     return this.truncate(word) + this.suffix
   }
 
-  truncate(word) {
-    return this.offset === 0 ? word : word.substr(0, word.length - this.offset)
-  }
-
   toString() {
     return `/${this.raw}/`
   }
+
+  truncate(word) {
+    return this.offset === 0 ? word : word.slice(0, Math.max(0, word.length - this.offset))
+  }
 }
 
-Util.Numbers = {
+Utility.Numbers = {
   fromWords: {
-    zero: 0,
-    one: 1,
-    two: 2,
-    three: 3,
-    four: 4,
-    five: 5,
-    six: 6,
-    seven: 7,
     eight: 8,
-    nine: 9,
-    ten: 10,
-    eleven: 11,
-    twelve: 12,
-    thirteen: 13,
-    fourteen: 14,
-    fifteen: 15,
-    sixteen: 16,
-    seventeen: 17,
     eighteen: 18,
-    nineteen: 19,
-    twenty: 20,
-    thirty: 30,
-    forty: 40,
-    fifty: 50,
-    sixty: 60,
-    seventy: 70,
     eighty: 80,
-    ninety: 90
+    eleven: 11,
+    fifteen: 15,
+    fifty: 50,
+    five: 5,
+    forty: 40,
+    four: 4,
+    fourteen: 14,
+    nine: 9,
+    nineteen: 19,
+    ninety: 90,
+    one: 1,
+    seven: 7,
+    seventeen: 17,
+    seventy: 70,
+    six: 6,
+    sixteen: 16,
+    sixty: 60,
+    ten: 10,
+    thirteen: 13,
+    thirty: 30,
+    three: 3,
+    twelve: 12,
+    twenty: 20,
+    two: 2,
+    zero: 0
   },
   toWords: {
     0: "zero",
     1: "one",
-    2: "two",
-    3: "three",
-    4: "four",
-    5: "five",
-    6: "six",
-    7: "seven",
-    8: "eight",
-    9: "nine",
     10: "ten",
     11: "eleven",
     12: "twelve",
@@ -220,18 +212,26 @@ Util.Numbers = {
     17: "seventeen",
     18: "eighteen",
     19: "nineteen",
+    2: "two",
     20: "twenty",
+    3: "three",
     30: "thirty",
+    4: "four",
     40: "forty",
+    5: "five",
     50: "fifty",
+    6: "six",
     60: "sixty",
+    7: "seven",
     70: "seventy",
+    8: "eight",
     80: "eighty",
+    9: "nine",
     90: "ninety"
   }
 }
 
-Util.Phones = {
+Utility.Phones = {
   consonants: [
     "b",
     "ch",
@@ -257,24 +257,6 @@ Util.Phones = {
     "y",
     "z",
     "zh"
-  ],
-  vowels: [
-    "aa",
-    "ae",
-    "ah",
-    "ao",
-    "aw",
-    "ax",
-    "ay",
-    "eh",
-    "er",
-    "ey",
-    "ih",
-    "iy",
-    "ow",
-    "oy",
-    "uh",
-    "uw"
   ],
   onsets: [
     "p",
@@ -347,10 +329,28 @@ Util.Phones = {
     "g y",
     "hh w",
     ""
+  ],
+  vowels: [
+    "aa",
+    "ae",
+    "ah",
+    "ao",
+    "aw",
+    "ax",
+    "ay",
+    "eh",
+    "er",
+    "ey",
+    "ih",
+    "iy",
+    "ow",
+    "oy",
+    "uh",
+    "uw"
   ]
 }
 
-Util.RE = function (a, b, c) {
+Utility.RE = function (a, b, c) {
   return new RE(a, b, c)
 }
 
@@ -400,4 +400,4 @@ Util.numToWords = function(num) {
 }
 */
 
-export default Util
+export default Utility
