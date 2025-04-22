@@ -14,7 +14,7 @@
     "pub": "./npnb/source/cli.js --no-release-draft --test-script test:dist patch",
     "prepub": "npm version patch && npm run build"
   },
-  "main": "dist/rita.js",
+  "main": "./src/rita.js",
   "types": "dist/rita.d.ts",
   "browser": "./dist/rita.min.js",
   "exports": {
