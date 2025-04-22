@@ -1,4 +1,4 @@
-import Util from "./util.js"
+import Utility from "./util.js"
 
 /**
  * @class Tagger
@@ -13,345 +13,6 @@ class Tagger {
     this.RiTa = parent
   }
 
-  isVerb(word, opts) {
-    const conj = this.RiTa.conjugator
-
-    // check irregular verbs (added 7/31/21)
-    if (this._isNoLexIrregularVerb(word)) return true
-    if (conj.IRREG_VERBS_LEX_VB.hasOwnProperty(word)) return true
-    if (conj.IRREG_VERBS_NOLEX.hasOwnProperty(word)) return true
-
-    // any verbs (vb*) in lexicon
-    const pos = this.allTags(word, opts)
-    return pos.some((p) => VERBS.includes(p))
-  }
-
-  isNoun(word) {
-    // see https://github.com/dhowe/rita/issues/130
-    const pos = this.allTags(word, { noGuessing: true })
-    return pos.some((p) => NOUNS.includes(p))
-  }
-
-  isAdverb(word) {
-    const pos = this.allTags(word)
-    return pos.some((p) => ADVS.includes(p))
-  }
-
-  isAdjective(word) {
-    const pos = this.allTags(word)
-    return pos.some((p) => ADJS.includes(p))
-  }
-
-  hasTag(choices, tag) {
-    if (!Array.isArray(choices)) return false
-    const choiceStr = choices.join()
-    return choiceStr.indexOf(tag) > -1
-  }
-
-  /* convert from array of tags to a string with tags inline */
-  inlineTags(words, tags, delimiter) {
-    if (!words || !words.length) return ""
-
-    if (words.length !== tags.length) {
-      throw Error(
-        `Tagger: invalid state: words(${words.length}` +
-          ")=" +
-          words +
-          " tags(" +
-          tags.length +
-          ")=" +
-          tags
-      )
-    }
-
-    delimiter = delimiter || "/"
-
-    let sb = ""
-    for (let i = 0; i < words.length; i++) {
-      sb += words[i]
-      if (!this.RiTa.isPunct(words[i])) {
-        sb += delimiter + tags[i]
-      }
-      sb += " "
-    }
-    return sb.trim()
-  }
-
-  allTags(word, opts = {}) {
-    // returns an array of choices
-
-    const noGuessing = opts.noGuessing || false
-    const noDerivations = opts.noDerivations || false
-
-    if (word && typeof word === "string" && word.length) {
-      const posData = this.RiTa.lexicon._posArr(word)
-      if (posData && posData.length > 0) return posData
-      if (word.includes("-") && opts.noGuessingOnHyphenated) return [] //#HWF
-      if (!noDerivations) return this._derivePosData(word, noGuessing)
-    }
-
-    return [] // empty array
-  }
-
-  /**
-   * Tags an array of words with their part-of-speech
-   * @param {(string|string[])} input - The input containing a word or words
-   * @param {object} [opts] - options for the tagging {inline, simple}
-   * @param {boolean} [opts.inline] - tags are returned inline with words
-   * @param {boolean} [opts.simple] - use simple tags (noun=n,verb=v,adverb=a,adjective=r)
-   * @returns {any} the pos tag(s) or string with tags inline
-   */
-  tag(
-    input,
-    opts = {
-      inline: false,
-      simple: false
-    }
-  ) {
-    const result = []
-    const choices2d = []
-    // @ts-ignore
-    const dbug = opts?.dbug || false
-
-    if (!input || !input.length) return opts.inline ? "" : []
-
-    /** @type {string[]} */
-    let words
-    if (Array.isArray(input)) {
-      words = input
-    } else {
-      // likely a string
-      if (!input.trim().length) {
-        // empty string
-        return opts.inline ? "" : []
-      }
-      // else tokenize to array
-      words = this.RiTa.tokenizer.tokenize(input)
-    }
-
-    for (let i = 0, l = words.length; i < l; i++) {
-      const word = words[i]
-      if (!word || !word.length) continue
-
-      if (this.RiTa.isPunct(word)) {
-        result[i] = word
-      } else if (word.length === 1) {
-        result[i] = this._handleSingleLetter(word)
-      } else {
-        //#HWF: skip guessing for not-in-dict hyphenated words as we deal with these later
-        const opts = this.allTags(word, { noGuessingOnHyphenated: true })
-        choices2d[i] = opts // || []; // all options
-        result[i] = opts.length ? opts[0] : "__HYPH__" // first option
-      }
-    }
-
-    // Adjust pos according to transformation rules
-    const tags = this._applyContext(words, result, choices2d, dbug)
-
-    if (opts.simple) {
-      // convert to simple tags
-      for (let i = 0; i < tags.length; i++) {
-        if (NOUNS.includes(tags[i])) tags[i] = "n"
-        else if (VERBS.includes(tags[i])) tags[i] = "v"
-        else if (ADJS.includes(tags[i])) tags[i] = "a"
-        else if (ADVS.includes(tags[i])) tags[i] = "r"
-        else tags[i] = "-" // default: other
-      }
-    }
-
-    return opts.inline ? this.inlineTags(words, tags) : tags
-  }
-
-  //////////////////////////////////////////////////////////////////
-
-  _isNoLexIrregularVerb(stem) {
-    return Object.values(this.RiTa.conjugator.IRREG_VERBS_NOLEX).includes(stem)
-  }
-
-  _checkPluralNounOrVerb(stem, result) {
-    const pos = this.RiTa.lexicon._posArr(stem)
-    if (pos) {
-      if (pos.includes("nn")) result.push("nns") // ?? any case
-      if (pos.includes("vb")) result.push("vbz")
-    }
-
-    // finally check irregular verb list
-    if ((!pos || !pos.includes("vbz")) && this._isNoLexIrregularVerb(stem))
-      result.push("vbz")
-  }
-
-  _safeConcat(a, b) {
-    if (a && b) return a.concat(b)
-    if (a) return a
-    if (b) return b
-  } // ! this function is never used
-
-  _derivePosData(word, noGuessing) {
-    // noGuessing arg disables the final guess when true,
-    // and instead returns an empty array if no rules match
-
-    if (word === "the" || word === "a") return ["dt"]
-
-    /*
-      Try for a verb or noun inflection 
-      VBD 	Verb, past tense
-      VBG 	Verb, gerund or present participle
-      VBN 	Verb, past participle
-      VBP 	Verb, non-3rd person singular present
-      VBZ 	Verb, 3rd person singular present
-      NNS   Noun, plural
-    */
-    const lex = this.RiTa.lexicon
-    const tags = lex._posArr(word)
-
-    if (word.endsWith("ress")) {
-      let pos = lex._posArr(word.substring(0, word.length - 3)) // murderess
-      if (pos && pos.includes("vb")) {
-        //murderess - murder
-        return ["nn"]
-      }
-      pos = lex._posArr(word.substring(0, word.length - 4)) // actress, waitress
-      if (pos && pos.includes("vb")) {
-        //actress - act
-        return ["nn"]
-      }
-    }
-
-    if (word.endsWith("or")) {
-      let pos = lex._posArr(word.substring(0, word.length - 2)) // actor, motor, editor
-      if (pos && pos.includes("vb")) {
-        //actress - act
-        return ["nn"]
-      }
-      pos = lex._posArr(`${word.substring(0, word.length - 2)}e`) // investigator, creator
-      if (pos && pos.includes("vb")) {
-        return ["nn"]
-      }
-    }
-
-    if (word.endsWith("er")) {
-      let pos = lex._posArr(word.substring(0, word.length - 2)) // builder
-
-      if (pos && pos.includes("vb")) return ["nn"]
-
-      pos = lex._posArr(word.substring(0, word.length - 1)) // dancer
-      if (pos && pos.includes("vb")) return ["nn"]
-
-      if (word.charAt(word.length - 3) === word.charAt(word.length - 4)) {
-        pos = lex._posArr(word.substring(0, word.length - 3)) // programmer
-        if (pos && pos.includes("vb")) return ["nn"]
-      }
-    }
-
-    if (word.endsWith("ies")) {
-      // 3rd-person sing. present (satisfies, falsifies)
-      const check = `${word.substring(0, word.length - 3)}y`
-      const pos = lex._posArr(check)
-      if (pos && pos.includes("vb")) return ["vbz"]
-    } else if (word.endsWith("s")) {
-      // singular noun ('bonus', 'census'), plural noun or vbz
-
-      const result = []
-
-      // remove suffix (s) and test (eg 'hates', 'cakes')
-      this._checkPluralNounOrVerb(word.substring(0, word.length - 1), result)
-
-      if (word.endsWith("es")) {
-        // remove suffix (es) and test (eg 'repossesses')
-        this._checkPluralNounOrVerb(word.substring(0, word.length - 2), result)
-
-        // singularize and test (eg 'thieves')
-        this._checkPluralNounOrVerb(this.RiTa.singularize(word), result)
-      }
-
-      if (result.length) return result
-    }
-
-    if (word.endsWith("ed")) {
-      // simple past or past participle
-      const pos =
-        lex._posArr(word.substring(0, word.length - 1)) ||
-        lex._posArr(word.substring(0, word.length - 2)) ||
-        lex._posArr(word.substring(0, word.length - 3)) //e.g deterred
-      if (pos && pos.includes("vb")) {
-        return ["vbd", "vbn"] // hate-> hated || row->rowed || deter -> deterred
-      }
-    }
-
-    if (word.endsWith("ing")) {
-      const stem = word.substring(0, word.length - 3)
-      if (stem) {
-        let pos = lex._posArr(stem)
-        if (pos && pos.includes("vb")) {
-          // vbg can be noun (in some contexts), for example: 'His acting is good'
-          // this is more for getting all 'possible' labels in tag() function as
-          // elsewhere tags are analyzed by context according to ruleset.
-          return ["vbg", "nn"] // assenting
-        }
-        pos = lex._posArr(`${stem}e`) // hate
-        if (pos && pos.includes("vb")) {
-          return ["vbg", "nn"] //  e.g: let's go hiking
-        }
-        // else
-        if (word.charAt(word.length - 4) === word.charAt(word.length - 5)) {
-          pos = lex._posArr(stem.substring(0, stem.length - 1)) // e.g running
-          if (pos && pos.includes("vb")) {
-            return ["vbg", "nn"] //  e.g. the tripping of an opponent is a foul in football
-          }
-        }
-      }
-    }
-
-    if (word.endsWith("ly")) {
-      const stem = word.substring(0, word.length - 2)
-      if (stem) {
-        let pos = lex._posArr(stem)
-        if (pos && pos.includes("jj")) {
-          // beautifully - beautiful
-          return ["rb"]
-        }
-        if (stem.charAt(stem.length - 1) === "i") {
-          pos = lex._posArr(`${stem.substring(0, stem.length - 1)}y`)
-          if (pos && pos.includes("jj")) {
-            // happily - happy
-            return ["rb"]
-          }
-        }
-      }
-    }
-
-    // Check if this could be a plural noun form
-    if (this.isLikelyPlural(word)) return ["nns"]
-
-    // Check if is irregular past part of a verb
-    const conj = this.RiTa.conjugator
-    if (conj.IRREG_PAST_PART.includes(word)) return ["vbd"]
-
-    // Give up
-    return (
-      noGuessing ? []
-      : word.endsWith("ly") ? ["rb"]
-      : word.endsWith("s") ? ["nns"]
-      : ["nn"]
-    )
-  }
-
-  isLikelyPlural(word) {
-    return this._lexHas("n", this.RiTa.singularize(word))
-    //|| this.RiTa.inflector.isPlural(word);
-  }
-
-  _handleSingleLetter(c) {
-    if (c === "a" || c === "A") return "dt"
-    if (c >= "0" && c <= "9") return "cd"
-    return c === "I" ? "prp" : c
-  }
-
-  _log(i, frm, to) {
-    // log custom tag
-    console.log(`\n  Custom(${i}) tagged '${frm}' -> '${to}'\n\n`)
-  } // debug only: not available in built version since 'dbug' in tag() is 0
-
   /**
    * Applies a customized subset of the Brill transformations
    * @param {string[]} words
@@ -362,28 +23,28 @@ class Tagger {
    */
   _applyContext(words, result, choices, dbug) {
     // Apply transformations
-    for (let i = 0, l = words.length; i < l; i++) {
-      const word = words[i]
-      let tag = result[i]
-      if (!word || !word.length) continue
+    for (let index = 0, l = words.length; index < l; index++) {
+      const word = words[index]
+      let tag = result[index]
+      if (!word || word.length === 0) continue
 
-      if (typeof tag === "undefined") {
+      if (tag === undefined) {
         tag = ""
         if (!this.RiTa.SILENT)
           console.warn(
-            `\n[WARN] Unexpected state in _applyContext for idx=${i}`,
+            `\n[WARN] Unexpected state in _applyContext for idx=${index}`,
             words,
             "\n"
           )
       }
 
       // transform 1a: DT, {VBD | VBP | VB} --> DT, NN
-      if (i > 0 && result[i - 1] === "dt") {
+      if (index > 0 && result[index - 1] === "dt") {
         if (tag.startsWith("vb")) {
           tag = "nn"
           // transform 7: if a word has been categorized as a common noun
           // and it ends with "s", then set its type to plural noun (NNS)
-          if (word.match(/^.*[^s]s$/) && !this.RiTa.MASS_NOUNS.includes(word)) {
+          if (/^.*[^s]s$/.test(word) && !this.RiTa.MASS_NOUNS.includes(word)) {
             tag = "nns"
           }
           //dbug && this._log("1a", word, tag);
@@ -398,7 +59,7 @@ class Tagger {
 
       // transform 2: convert a noun to a number (cd) if it is
       // all digits and/or a decimal "."
-      if (tag.startsWith("n") && Util.isNum(word)) {
+      if (tag.startsWith("n") && Utility.isNum(word)) {
         tag = "cd"
         //dbug && this._log(2, word, tag);
       } // mods: dch (add choice check above) <---- ? >
@@ -406,10 +67,10 @@ class Tagger {
       // transform 3: convert a noun to a past participle if
       // word ends with "ed" and (following any nn or prp?)
       if (
-        i > 0 &&
+        index > 0 &&
         tag.startsWith("n") &&
         word.endsWith("ed") &&
-        result[i - 1].match(/^(nn|prp)$/) &&
+        /^(nn|prp)$/.test(result[index - 1]) &&
         !word.endsWith("eed")
       ) {
         //dbug && this._log(3, word, tag);
@@ -436,14 +97,14 @@ class Tagger {
 
       // transform 6: convert a noun to a verb if the
       // preceeding word is modal
-      if (i > 0 && tag.startsWith("nn") && result[i - 1].startsWith("md")) {
+      if (index > 0 && tag.startsWith("nn") && result[index - 1].startsWith("md")) {
         tag = "vb"
         //dbug && this._log(6, word, tag);
       }
 
       //transform 7(dch): convert a vb to vbn when following vbz/'has'
       // (She has ridden, He has rode)
-      if (tag === "vbd" && i > 0 && result[i - 1].match(/^(vbz)$/)) {
+      if (tag === "vbd" && index > 0 && /^(vbz)$/.test(result[index - 1])) {
         tag = "vbn"
         //dbug && this._log(7, word, tag);
       }
@@ -453,7 +114,7 @@ class Tagger {
       if (
         tag.startsWith("nn") &&
         word.endsWith("ing") &&
-        this.hasTag(choices[i], "vbg")
+        this.hasTag(choices[index], "vbg")
       ) {
         // fixed for 'fishing' and etc
         tag = "vbg"
@@ -463,10 +124,10 @@ class Tagger {
       // transform 9(dch): convert plural nouns (which are also 3sg-verbs) to
       // 3sg-verbs when following a singular noun (the dog dances, Dave dances, he dances)
       if (
-        i > 0 &&
+        index > 0 &&
         tag === "nns" &&
-        this.hasTag(choices[i], "vbz") &&
-        result[i - 1].match(/^(nn|prp|nnp)$/)
+        this.hasTag(choices[index], "vbz") &&
+        /^(nn|prp|nnp)$/.test(result[index - 1])
       ) {
         tag = "vbz"
         //dbug && this._log(9, word, tag);
@@ -480,8 +141,8 @@ class Tagger {
         const sing = this.RiTa.singularize(word.toLowerCase())
         if (
           words.length === 1 ||
-          i > 0 ||
-          (i == 0 && !this._lexHas("nn", sing))
+          index > 0 ||
+          (index == 0 && !this._lexHas("nn", sing))
         ) {
           tag = tag.endsWith("s") ? "nnps" : "nnp"
           //dbug && this._log(10, word, tag);
@@ -491,10 +152,10 @@ class Tagger {
       // transform 11(dch): convert plural nouns (which are also 3sg-verbs)
       // to 3sg-verbs when followed by adverb
       if (
-        i < result.length - 1 &&
+        index < result.length - 1 &&
         tag == "nns" &&
-        result[i + 1].startsWith("rb") &&
-        this.hasTag(choices[i], "vbz")
+        result[index + 1].startsWith("rb") &&
+        this.hasTag(choices[index], "vbz")
       ) {
         tag = "vbz"
         //dbug && this._log(11, word, tag);
@@ -504,14 +165,14 @@ class Tagger {
       // for their base form to vbz
       if (tag === "nns") {
         // is preceded by one of the following
-        if (i > 0 && ["nn", "prp", "cc", "nnp"].includes(result[i - 1])) {
+        if (index > 0 && ["cc", "nn", "nnp", "prp"].includes(result[index - 1])) {
           // if word is ends with s or es and is 'nns' and has a vb
           if (this._lexHas("vb", this.RiTa.singularize(word))) {
             tag = "vbz"
             //dbug && this._log(12, word, tag);
           }
         } // if only word and not in lexicon
-        else if (words.length === 1 && choices[i].length < 2) {
+        else if (words.length === 1 && choices[index].length < 2) {
           // there is always choices[i][0] which is result[i]
           // (when the word is not in lexicon, generated by _derivePosData())
           // if the stem of a single word could be both nn and vb, return nns
@@ -528,9 +189,9 @@ class Tagger {
       // transform 13(cqx): convert a vb/ potential vb to vbp
       // when following nns (Elephants dance, they dance)
       if (
-        (tag === "vb" || (tag === "nn" && this.hasTag(choices[i], "vb"))) &&
-        i > 0 &&
-        result[i - 1].match(/^(nns|nnps|prp)$/)
+        (tag === "vb" || (tag === "nn" && this.hasTag(choices[index], "vb"))) &&
+        index > 0 &&
+        /^(nns|nnps|prp)$/.test(result[index - 1])
       ) {
         tag = "vbp"
         //dbug && this._log(13, word, tag);
@@ -538,11 +199,11 @@ class Tagger {
 
       // issue#83 sequential adjectives(jc): (?:dt)? (?:jj)* (nn) (?:jj)* nn
       // && $1 can be tagged as jj-> $1 convert to jj (e.g a light blue sky)
-      if (tag === "nn" && result.slice(i + 1).includes("nn")) {
-        const idx = result.slice(i + 1).indexOf("nn")
+      if (tag === "nn" && result.slice(index + 1).includes("nn")) {
+        const index_ = result.slice(index + 1).indexOf("nn")
         let allJJ = true // between nn and nn are all jj
-        for (let k = 0; k < idx; k++) {
-          if (result[i + 1 + k] !== "jj") {
+        for (let k = 0; k < index_; k++) {
+          if (result[index + 1 + k] !== "jj") {
             allJJ = false
             break
           }
@@ -555,62 +216,267 @@ class Tagger {
       // https://github.com/dhowe/rita/issues/148
       // "there"
       if (word.toLowerCase() === "there") {
-        if (words[i + 1] && EX_BE.includes(words[i + 1])) {
+        if (words[index + 1] && EX_BE.has(words[index + 1])) {
           tag = "ex"
         }
-        if (i > 0 && result[i - 1] === "in") {
+        if (index > 0 && result[index - 1] === "in") {
           tag = "nn"
         }
       }
 
       // https://github.com/dhowe/rita/issues/65 #HWF
       if (word.includes("-")) {
-        if (result[i] !== "__HYPH__") continue // in dict
+        if (result[index] !== "__HYPH__") continue // in dict
         if (word === "--") continue // double hyphen treated as dash
         if (HYPHENATEDS.hasOwnProperty(word)) {
-          result[i] = HYPHENATEDS[word]
+          result[index] = HYPHENATEDS[word]
           if (dbug) console.log(`${word}: ${HYPHENATEDS[word]} ACC: special`)
           continue
         }
-        tag = this._tagCompoundWord(word, tag, result, words, i, dbug)
+        tag = this._tagCompoundWord(word, tag, result, words, index, dbug)
       }
 
-      result[i] = tag
+      result[index] = tag
     }
 
     return result
   }
 
+  _checkPluralNounOrVerb(stem, result) {
+    const pos = this.RiTa.lexicon._posArr(stem)
+    if (pos) {
+      if (pos.includes("nn")) result.push("nns") // ?? any case
+      if (pos.includes("vb")) result.push("vbz")
+    }
+
+    // finally check irregular verb list
+    if ((!pos || !pos.includes("vbz")) && this._isNoLexIrregularVerb(stem))
+      result.push("vbz")
+  }
+
+  _derivePosData(word, noGuessing) {
+    // noGuessing arg disables the final guess when true,
+    // and instead returns an empty array if no rules match
+
+    if (word === "the" || word === "a") return ["dt"]
+
+    /*
+      Try for a verb or noun inflection 
+      VBD 	Verb, past tense
+      VBG 	Verb, gerund or present participle
+      VBN 	Verb, past participle
+      VBP 	Verb, non-3rd person singular present
+      VBZ 	Verb, 3rd person singular present
+      NNS   Noun, plural
+    */
+    const lex = this.RiTa.lexicon
+    const tags = lex._posArr(word)
+
+    if (word.endsWith("ress")) {
+      let pos = lex._posArr(word.slice(0, Math.max(0, word.length - 3))) // murderess
+      if (pos && pos.includes("vb")) {
+        //murderess - murder
+        return ["nn"]
+      }
+      pos = lex._posArr(word.slice(0, Math.max(0, word.length - 4))) // actress, waitress
+      if (pos && pos.includes("vb")) {
+        //actress - act
+        return ["nn"]
+      }
+    }
+
+    if (word.endsWith("or")) {
+      let pos = lex._posArr(word.slice(0, Math.max(0, word.length - 2))) // actor, motor, editor
+      if (pos && pos.includes("vb")) {
+        //actress - act
+        return ["nn"]
+      }
+      pos = lex._posArr(`${word.slice(0, Math.max(0, word.length - 2))}e`) // investigator, creator
+      if (pos && pos.includes("vb")) {
+        return ["nn"]
+      }
+    }
+
+    if (word.endsWith("er")) {
+      let pos = lex._posArr(word.slice(0, Math.max(0, word.length - 2))) // builder
+
+      if (pos && pos.includes("vb")) return ["nn"]
+
+      pos = lex._posArr(word.slice(0, Math.max(0, word.length - 1))) // dancer
+      if (pos && pos.includes("vb")) return ["nn"]
+
+      if (word.charAt(word.length - 3) === word.charAt(word.length - 4)) {
+        pos = lex._posArr(word.slice(0, Math.max(0, word.length - 3))) // programmer
+        if (pos && pos.includes("vb")) return ["nn"]
+      }
+    }
+
+    if (word.endsWith("ies")) {
+      // 3rd-person sing. present (satisfies, falsifies)
+      const check = `${word.slice(0, Math.max(0, word.length - 3))}y`
+      const pos = lex._posArr(check)
+      if (pos && pos.includes("vb")) return ["vbz"]
+    } else if (word.endsWith("s")) {
+      // singular noun ('bonus', 'census'), plural noun or vbz
+
+      const result = []
+
+      // remove suffix (s) and test (eg 'hates', 'cakes')
+      this._checkPluralNounOrVerb(word.slice(0, Math.max(0, word.length - 1)), result)
+
+      if (word.endsWith("es")) {
+        // remove suffix (es) and test (eg 'repossesses')
+        this._checkPluralNounOrVerb(word.slice(0, Math.max(0, word.length - 2)), result)
+
+        // singularize and test (eg 'thieves')
+        this._checkPluralNounOrVerb(this.RiTa.singularize(word), result)
+      }
+
+      if (result.length > 0) return result
+    }
+
+    if (word.endsWith("ed")) {
+      // simple past or past participle
+      const pos =
+        lex._posArr(word.slice(0, Math.max(0, word.length - 1))) ||
+        lex._posArr(word.slice(0, Math.max(0, word.length - 2))) ||
+        lex._posArr(word.slice(0, Math.max(0, word.length - 3))) //e.g deterred
+      if (pos && pos.includes("vb")) {
+        return ["vbd", "vbn"] // hate-> hated || row->rowed || deter -> deterred
+      }
+    }
+
+    if (word.endsWith("ing")) {
+      const stem = word.slice(0, Math.max(0, word.length - 3))
+      if (stem) {
+        let pos = lex._posArr(stem)
+        if (pos && pos.includes("vb")) {
+          // vbg can be noun (in some contexts), for example: 'His acting is good'
+          // this is more for getting all 'possible' labels in tag() function as
+          // elsewhere tags are analyzed by context according to ruleset.
+          return ["vbg", "nn"] // assenting
+        }
+        pos = lex._posArr(`${stem}e`) // hate
+        if (pos && pos.includes("vb")) {
+          return ["vbg", "nn"] //  e.g: let's go hiking
+        }
+        // else
+        if (word.charAt(word.length - 4) === word.charAt(word.length - 5)) {
+          pos = lex._posArr(stem.slice(0, Math.max(0, stem.length - 1))) // e.g running
+          if (pos && pos.includes("vb")) {
+            return ["vbg", "nn"] //  e.g. the tripping of an opponent is a foul in football
+          }
+        }
+      }
+    }
+
+    if (word.endsWith("ly")) {
+      const stem = word.slice(0, Math.max(0, word.length - 2))
+      if (stem) {
+        let pos = lex._posArr(stem)
+        if (pos && pos.includes("jj")) {
+          // beautifully - beautiful
+          return ["rb"]
+        }
+        if (stem.charAt(stem.length - 1) === "i") {
+          pos = lex._posArr(`${stem.slice(0, Math.max(0, stem.length - 1))}y`)
+          if (pos && pos.includes("jj")) {
+            // happily - happy
+            return ["rb"]
+          }
+        }
+      }
+    }
+
+    // Check if this could be a plural noun form
+    if (this.isLikelyPlural(word)) return ["nns"]
+
+    // Check if is irregular past part of a verb
+    const conj = this.RiTa.conjugator
+    if (conj.IRREG_PAST_PART.includes(word)) return ["vbd"]
+
+    // Give up
+    return (
+      noGuessing ? []
+      : word.endsWith("ly") ? ["rb"]
+      : word.endsWith("s") ? ["nns"]
+      : ["nn"]
+    )
+  }
+
+  _handleSingleLetter(c) {
+    if (c === "a" || c === "A") return "dt"
+    if (c >= "0" && c <= "9") return "cd"
+    return c === "I" ? "prp" : c
+  }
+
+  _isNoLexIrregularVerb(stem) {
+    return Object.values(this.RiTa.conjugator.IRREG_VERBS_NOLEX).includes(stem)
+  }
+
+  _lexHas(pos, word) {
+    // takes ([n|v|a|r] or a full tag
+    if (typeof word !== "string") {
+      return
+    }
+    const tags = this.RiTa.lexicon._posArr(word)
+    if (!tags) return false
+    for (const tag of tags) {
+      if (pos === tag) return true
+      if (
+        (pos === "n" && NOUNS.has(tag)) ||
+        (pos === "v" && VERBS.has(tag)) ||
+        (pos === "r" && ADVS.has(tag)) ||
+        (pos === "a" && ADJS.has(/*.isAdjTag*/ tag))
+      ) {
+        return true
+      }
+    }
+  }
+
+  _log(index, frm, to) {
+    // log custom tag
+    console.log(`\n  Custom(${index}) tagged '${frm}' -> '${to}'\n\n`)
+  } // debug only: not available in built version since 'dbug' in tag() is 0
+
+  _safeConcat(a, b) {
+    if (a && b) return a.concat(b)
+    if (a) return a
+    if (b) return b
+  } // ! this function is never used
+
+  //////////////////////////////////////////////////////////////////
+
   // determine tag for compound (hyphenated) word
-  _tagCompoundWord(word, tag, result, context, i, dbug) {
+  _tagCompoundWord(word, tag, result, context, index, dbug) {
     // #HWF
 
     const words = word.split("-")
     const firstPart = words[0]
-    const lastPart = words[words.length - 1]
+    const lastPart = words.at(-1)
     const firstPartAllTags = this.allTags(firstPart)
     const lastPartAllTags = this.allTags(lastPart)
 
     if (
       words.length === 2 &&
-      VERB_PREFIX.includes(words[0]) &&
-      lastPartAllTags.some((t) => /^vb/.test(t))
+      VERB_PREFIX.has(words[0]) &&
+      lastPartAllTags.some((t) => t.startsWith('vb'))
     ) {
-      tag = lastPartAllTags.find((t) => /^vb/.test(t))
+      tag = lastPartAllTags.find((t) => t.startsWith('vb'))
       if (dbug) console.log(`${word}: ${tag} ACC: prefix-vb`)
     } else if (
       words.length === 2 &&
-      NOUN_PREFIX.includes(words[0]) &&
-      lastPartAllTags.some((t) => /^nn/.test(t))
+      NOUN_PREFIX.has(words[0]) &&
+      lastPartAllTags.some((t) => t.startsWith('nn'))
     ) {
-      tag = lastPartAllTags.find((t) => /^nn/.test(t))
+      tag = lastPartAllTags.find((t) => t.startsWith('nn'))
       if (dbug) console.log(`${word}: ${tag} ACC: prefix-nn`)
-    } else if (firstPartAllTags.some((t) => /^cd/.test(t))) {
+    } else if (firstPartAllTags.some((t) => t.startsWith('cd'))) {
       // numbers
       let allCD = true
       for (let z = 1; z < words.length; z++) {
         const part = words[z]
-        if (!this.allTags(part).some((t) => /^cd/.test(t))) {
+        if (!this.allTags(part).some((t) => t.startsWith('cd'))) {
           allCD = false
           break
         }
@@ -631,11 +497,11 @@ class Tagger {
       tag = "jj"
       if (dbug) console.log(`${word}: ${tag} ACC: jj-nn`)
     } else if (
-      firstPartAllTags.some((t) => t === "vb") &&
+      firstPartAllTags.includes("vb") &&
       !firstPartAllTags.some((t) => t.startsWith("jj"))
     ) {
       // first part is vb
-      if (words.length === 2 && lastPartAllTags.some((t) => t === "in")) {
+      if (words.length === 2 && lastPartAllTags.includes("in")) {
         // verb phrase with in, e.g. blush-on tip-off get-together run-in
         tag = "nn"
         if (dbug) console.log(`${word}: ${tag} ACC: vb-in`)
@@ -699,53 +565,187 @@ class Tagger {
     }
 
     // change according to context
-    if (result[i + 1] && result[i + 1].startsWith("n") && tag.startsWith("n")) {
+    if (result[index + 1] && result[index + 1].startsWith("n") && tag.startsWith("n")) {
       //next word is a noun
       return "jj"
-    } else if (tag === "jj" && result[i + 1] && result[i + 1].startsWith("v")) {
+    } else if (tag === "jj" && result[index + 1] && result[index + 1].startsWith("v")) {
       //next word is a verb, last part is rb/verb
       tag = "rb"
-    } else if (result[i + 1] && result[i + 1].startsWith("v") && tag === "jj") {
+    } else if (result[index + 1] && result[index + 1].startsWith("v") && tag === "jj") {
       return "rb"
     } else if (
       tag === "jj" &&
-      context[i - 1] &&
-      ARTICLES.includes(context[i - 1].toLowerCase().trim()) &&
-      (!context[i + 1] ||
-        (result[i + 1] && /^(v|cc|in|md|w)/.test(result[i + 1])) ||
-        this.RiTa.isPunct(context[i + 1]))
+      context[index - 1] &&
+      ARTICLES.has(context[index - 1].toLowerCase().trim()) &&
+      (!context[index + 1] ||
+        (result[index + 1] && /^(v|cc|in|md|w)/.test(result[index + 1])) ||
+        this.RiTa.isPunct(context[index + 1]))
     ) {
       return "nn"
     }
     return tag
   }
 
-  _lexHas(pos, word) {
-    // takes ([n|v|a|r] or a full tag
-    if (typeof word !== "string") {
-      return
+  allTags(word, options = {}) {
+    // returns an array of choices
+
+    const noGuessing = options.noGuessing || false
+    const noDerivations = options.noDerivations || false
+
+    if (word && typeof word === "string" && word.length) {
+      const posData = this.RiTa.lexicon._posArr(word)
+      if (posData && posData.length > 0) return posData
+      if (word.includes("-") && options.noGuessingOnHyphenated) return [] //#HWF
+      if (!noDerivations) return this._derivePosData(word, noGuessing)
     }
-    const tags = this.RiTa.lexicon._posArr(word)
-    if (!tags) return false
-    for (let j = 0; j < tags.length; j++) {
-      if (pos === tags[j]) return true
-      if (
-        (pos === "n" && NOUNS.includes(tags[j])) ||
-        (pos === "v" && VERBS.includes(tags[j])) ||
-        (pos === "r" && ADVS.includes(tags[j])) ||
-        (pos === "a" && ADJS.includes(/*.isAdjTag*/ tags[j]))
-      ) {
-        return true
+
+    return [] // empty array
+  }
+
+  hasTag(choices, tag) {
+    if (!Array.isArray(choices)) return false
+    const choiceString = choices.join()
+    return choiceString.indexOf(tag) > -1
+  }
+
+  /* convert from array of tags to a string with tags inline */
+  inlineTags(words, tags, delimiter) {
+    if (!words || words.length === 0) return ""
+
+    if (words.length !== tags.length) {
+      throw new Error(
+        `Tagger: invalid state: words(${words.length}` +
+          ")=" +
+          words +
+          " tags(" +
+          tags.length +
+          ")=" +
+          tags
+      )
+    }
+
+    delimiter = delimiter || "/"
+
+    let sb = ""
+    for (const [i, word] of words.entries()) {
+      sb += word
+      if (!this.RiTa.isPunct(word)) {
+        sb += delimiter + tags[i]
+      }
+      sb += " "
+    }
+    return sb.trim()
+  }
+
+  isAdjective(word) {
+    const pos = this.allTags(word)
+    return pos.some((p) => ADJS.has(p))
+  }
+
+  isAdverb(word) {
+    const pos = this.allTags(word)
+    return pos.some((p) => ADVS.has(p))
+  }
+
+  isLikelyPlural(word) {
+    return this._lexHas("n", this.RiTa.singularize(word))
+    //|| this.RiTa.inflector.isPlural(word);
+  }
+
+  isNoun(word) {
+    // see https://github.com/dhowe/rita/issues/130
+    const pos = this.allTags(word, { noGuessing: true })
+    return pos.some((p) => NOUNS.has(p))
+  }
+
+  isVerb(word, options) {
+    const conj = this.RiTa.conjugator
+
+    // check irregular verbs (added 7/31/21)
+    if (this._isNoLexIrregularVerb(word)) return true
+    if (conj.IRREG_VERBS_LEX_VB.hasOwnProperty(word)) return true
+    if (conj.IRREG_VERBS_NOLEX.hasOwnProperty(word)) return true
+
+    // any verbs (vb*) in lexicon
+    const pos = this.allTags(word, options)
+    return pos.some((p) => VERBS.has(p))
+  }
+
+  /**
+   * Tags an array of words with their part-of-speech
+   * @param {(string|string[])} input - The input containing a word or words
+   * @param {object} [opts] - options for the tagging {inline, simple}
+   * @param {boolean} [opts.inline] - tags are returned inline with words
+   * @param {boolean} [opts.simple] - use simple tags (noun=n,verb=v,adverb=a,adjective=r)
+   * @returns {any} the pos tag(s) or string with tags inline
+   */
+  tag(
+    input,
+    options = {
+      inline: false,
+      simple: false
+    }
+  ) {
+    const result = []
+    const choices2d = []
+    // @ts-ignore
+    const dbug = options?.dbug || false
+
+    if (!input || !input.length) return options.inline ? "" : []
+
+    /** @type {string[]} */
+    let words
+    if (Array.isArray(input)) {
+      words = input
+    } else {
+      // likely a string
+      if (!input.trim().length) {
+        // empty string
+        return options.inline ? "" : []
+      }
+      // else tokenize to array
+      words = this.RiTa.tokenizer.tokenize(input)
+    }
+
+    for (let i = 0, l = words.length; i < l; i++) {
+      const word = words[i]
+      if (!word || !word.length) continue
+
+      if (this.RiTa.isPunct(word)) {
+        result[i] = word
+      } else if (word.length === 1) {
+        result[i] = this._handleSingleLetter(word)
+      } else {
+        //#HWF: skip guessing for not-in-dict hyphenated words as we deal with these later
+        const opts = this.allTags(word, { noGuessingOnHyphenated: true })
+        choices2d[i] = opts // || []; // all options
+        result[i] = opts.length ? opts[0] : "__HYPH__" // first option
       }
     }
+
+    // Adjust pos according to transformation rules
+    const tags = this._applyContext(words, result, choices2d, dbug)
+
+    if (options.simple) {
+      // convert to simple tags
+      for (let i = 0; i < tags.length; i++) {
+        if (NOUNS.has(tags[i])) tags[i] = "n"
+        else if (VERBS.has(tags[i])) tags[i] = "v"
+        else if (ADJS.has(tags[i])) tags[i] = "a"
+        else if (ADVS.has(tags[i])) tags[i] = "r"
+        else tags[i] = "-" // default: other
+      }
+    }
+
+    return options.inline ? this.inlineTags(words, tags) : tags
   }
 }
 
-const ADJS = ["jj", "jjr", "jjs"]
-const ADVS = ["rb", "rbr", "rbs", "rp"]
-const NOUNS = ["nn", "nns", "nnp", "nnps"]
-const VERBS = ["vb", "vbd", "vbg", "vbn", "vbp", "vbz"]
-const EX_BE = [
+const ADJS = new Set(["jj", "jjr", "jjs"])
+const ADVS = new Set(["rb", "rbr", "rbs", "rp"])
+const NOUNS = new Set(["nn", "nns", "nnp", "nnps"])
+const VERBS = new Set(["vb", "vbd", "vbg", "vbn", "vbp", "vbz"])
+const EX_BE = new Set([
   "is",
   "are",
   "was",
@@ -754,19 +754,19 @@ const EX_BE = [
   "aren't",
   "wasn't",
   "weren't"
-]
+])
 
 //#HWF
 const HYPHENATEDS = {
-  "well-being": "nn", // by rules should be jj, like 'good-looking'
-  "knee-length": "jj", // by rules should be nn, coz all parts are noun, like 'gift-wrap'
-  "king-size": "jj", // by rules should be nn, coz all parts are noun
   "ho-hum": "uh", // by rules should be nn, coz all parts are noun as ho will be recognise as nn in the algorithm
-  "roly-poly": "jj", // by rules should be nn, coz all parts are recognise as nn in the algorithm
+  "king-size": "jj", // by rules should be nn, coz all parts are noun
+  "knee-length": "jj", // by rules should be nn, coz all parts are noun, like 'gift-wrap'
   "nitty-gritty": "nn", // by rules should be jj, coz gritty is jj
-  "topsy-turvy": "jj" // by rules should be nn, coz all parts are recognise as nn in the algorithm
+  "roly-poly": "jj", // by rules should be nn, coz all parts are recognise as nn in the algorithm
+  "topsy-turvy": "jj", // by rules should be nn, coz all parts are recognise as nn in the algorithm
+  "well-being": "nn" // by rules should be jj, like 'good-looking'
 }
-const VERB_PREFIX = [
+const VERB_PREFIX = new Set([
   "de",
   "over",
   "re",
@@ -782,8 +782,8 @@ const VERB_PREFIX = [
   "sub",
   "trans",
   "under"
-]
-const NOUN_PREFIX = [
+])
+const NOUN_PREFIX = new Set([
   "anti",
   "auto",
   "de",
@@ -820,8 +820,8 @@ const NOUN_PREFIX = [
   "tri",
   "ultra",
   "vice"
-]
+])
 //const ADJECTIVE_PREFIX = ["dis", "non", "semi", "un"]; // JC: not used?
-const ARTICLES = ["the", "a", "an", "some"]
+const ARTICLES = new Set(["the", "a", "an", "some"])
 
 export default Tagger

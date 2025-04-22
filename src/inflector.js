@@ -1,4 +1,4 @@
-import Util from "./util.js"
+import Utility from "./util.js"
 
 /**
  * @class Inflector
@@ -12,7 +12,7 @@ class Inflector {
   adjustNumber(word, type, dbug) {
     if (word && typeof word !== "string") {
       // TODO: fix for singularize([1]) and similar calls
-      throw Error(
+      throw new Error(
         `${type === SING ? "singularize()" : "pluralize()"}` +
           " requires a string as input"
       )
@@ -20,7 +20,7 @@ class Inflector {
 
     if (!word) return ""
     word = word.trim()
-    if (!word.length) return ""
+    if (word.length === 0) return ""
 
     const check = word.toLowerCase()
 
@@ -31,68 +31,33 @@ class Inflector {
     }
 
     const rules = type === SING ? SING_RULES : PLUR_RULES
-    for (let i = 0; i < rules.length; i++) {
-      const rule = rules[i]
+    for (let index = 0; index < rules.length; index++) {
+      const rule = rules[index]
       if (rule.applies(check)) {
         dbug &&
           console.log(
             `${word} (${type === SING ? "singularize" : "pluralize"}` +
               ") hit " +
               (type === SING ? "singular" : "plural") +
-              (i < rules.length - 1 ? ` rule #${i}` : " DEFAULT rule"),
+              (index < rules.length - 1 ? ` rule #${index}` : " DEFAULT rule"),
             rule
           )
-        return rules[i].fire(word)
+        return rules[index].fire(word)
       }
     }
 
     return word
   }
 
-  singularize(word, opts) {
-    // if (this.isSingular(word, opts)) {   // 12/6/23
-    //   if (opts && opts.debug) console.log("pluralize returning via isPlural()");
-    //   return word;
-    // }
-    return this.adjustNumber(word, SING, opts && opts.dbug)
-  }
-
-  pluralize(word, opts) {
-    if (this.isPlural(word, opts)) {
-      if (opts && opts.debug) console.log("pluralize returning via isPlural()")
-      return word
-    }
-    return this.adjustNumber(word, PLUR, opts && opts.dbug)
-  }
-
-  /*isSingular(word, opts) { 
-    // return false;
-    // if (word && typeof word !== 'string') {
-    //   throw Error(`isSingular() takes string`);
-    // }
-    if (!word || !word.length) return false;
-
-    let dbug = opts && opts.dbug;
-
-    word = word.toLowerCase();
-
-    if (this.RiTa.MASS_NOUNS.includes(word)) {
-      dbug && console.log(word + " is mass noun");
-      return true;
-    }
-
-    return NOUNS_ENDING_IN_S.includes(word);
-  }*/
-
-  isPlural(word, opts) {
+  isPlural(word, options) {
     // add to API?
 
     // if (word && typeof word !== 'string') {
     //   throw Error(`isPlural() takes string`);
     // }
-    if (!word || !word.length) return false
+    if (!word || word.length === 0) return false
 
-    const dbug = opts && opts.dbug
+    const dbug = options && options.dbug
 
     word = word.toLowerCase()
 
@@ -102,14 +67,14 @@ class Inflector {
       return true
     }
 
-    for (let i = 0; i < IS_PLURAL_RULES.length; i++) {
-      const rule = IS_PLURAL_RULES[i]
+    for (let index = 0; index < IS_PLURAL_RULES.length; index++) {
+      const rule = IS_PLURAL_RULES[index]
       if (rule.test(word)) {
         dbug &&
           console.log(
             `${word} (isPlural) hit plural` +
-              (i < IS_PLURAL_RULES.length - 1 ?
-                ` rule #${i}`
+              (index < IS_PLURAL_RULES.length - 1 ?
+                ` rule #${index}`
               : " DEFAULT rule"),
             rule
           )
@@ -129,7 +94,7 @@ class Inflector {
       }
     }
 
-    const sing = this.singularize(word, opts)
+    const sing = this.singularize(word, options)
 
     // Is singularized form different
     if (sing !== word) {
@@ -157,13 +122,48 @@ class Inflector {
 
     return false
   }
+
+  pluralize(word, options) {
+    if (this.isPlural(word, options)) {
+      if (options && options.debug) console.log("pluralize returning via isPlural()")
+      return word
+    }
+    return this.adjustNumber(word, PLUR, options && options.dbug)
+  }
+
+  /*isSingular(word, opts) { 
+    // return false;
+    // if (word && typeof word !== 'string') {
+    //   throw Error(`isSingular() takes string`);
+    // }
+    if (!word || !word.length) return false;
+
+    let dbug = opts && opts.dbug;
+
+    word = word.toLowerCase();
+
+    if (this.RiTa.MASS_NOUNS.includes(word)) {
+      dbug && console.log(word + " is mass noun");
+      return true;
+    }
+
+    return NOUNS_ENDING_IN_S.includes(word);
+  }*/
+
+  singularize(word, options) {
+    // if (this.isSingular(word, opts)) {   // 12/6/23
+    //   if (opts && opts.debug) console.log("pluralize returning via isPlural()");
+    //   return word;
+    // }
+    return this.adjustNumber(word, SING, options && options.dbug)
+  }
 }
 
-const RE = Util.RE
+const RE = Utility.RE
 const PLUR = 1
 const SING = 2
 const DEFAULT_SING = RE("^.*[^s]s$", 1)
-const DEFAULT_PLUR = RE("^((\\w+)(-\\w+)*)(\\s((\\w+)(-\\w+)*))*$", 0, "s")
+const DEFAULT_PLUR = RE(String.raw`^((\w+)(-\w+)*)(\s((\w+)(-\w+)*))*$`, 0, "s")
 
 //const DEFAULT_IS_PLUR_RE = /(ae|ia|s)$/; // NOT USED?
 const NOUNS_ENDING_IN_E =

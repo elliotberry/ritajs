@@ -38,16 +38,152 @@ class RiMarkov {
 
     /** @type {Set<string>} */ this.sentenceEnds = new Set() // no dups
 
-    if (this.n < 2) throw Error("minimum N is 2")
+    if (this.n < 2) throw new Error("minimum N is 2")
 
     if (this.mlm && this.mlm < this.n)
-      throw Error("maxLengthMatch must be >= N")
+      throw new Error("maxLengthMatch must be >= N")
 
     // we store inputs to verify we don't duplicate sentences
     if (!this.disableInputChecks || this.mlm) this.input = []
 
     // add text if supplied as opt //
     if (options.text) this.addText(options.text)
+  }
+
+  /**
+   * Creates a new model from one previously saved as JSON
+   * @param {string} json - the JSON string to load
+   * @return {RiMarkov} - the RiMarkov instance
+   */
+  static fromJSON(json) {
+    // parse the json and merge with new object
+    const parsed = parse(json)
+    const rm = Object.assign(new RiMarkov(), parsed)
+
+    // convert our json array back to a set
+    rm.sentenceEnds = new Set(...parsed.sentenceEnds)
+
+    // handle json converting undefined [] to empty []
+    if (!parsed.input) rm.input = undefined
+
+    // then recreate the n-gram tree with Node objects
+    const jsonRoot = rm.root
+    populate((rm.root = new Node(null, "ROOT")), jsonRoot)
+
+    return rm
+  }
+
+  /* create a sentence string from an array of nodes */
+  _flatten(nodes) {
+    if (!nodes || (Array.isArray(nodes) && nodes.length === 0)) return ""
+    if (nodes.token) return nodes.token // single-node
+    const array = nodes.map((n) => (n ? n.token : "[undef]"))
+    const sent = this.untokenize(array)
+    return sent.replaceAll(MULTI_SP_RE, " ")
+  }
+
+  /*
+   * Returns true if node (or string) is a sentence end
+   */
+  _isEnd(node) {
+    if (node) {
+      let check = node
+      if ("token" in node) check = node.token // needed?
+      return this.sentenceEnds.has(check)
+    }
+    return false
+  }
+
+  /*
+   * Follows 'path' (using only the last n-1 tokens) from root and returns
+   * the node for the last element if it exists, otherwise undefined
+   * @param  {Node[]} path
+   * @param  {node} root of tree to search
+   * @return {node} or undefined
+   */
+  _pathTo(path, root) {
+    root = root || this.root
+    if (typeof path === "string") path = [path]
+    if (!path || path.length === 0 || this.n < 2) return root
+    let index = Math.max(0, path.length - (this.n - 1))
+    let node = root.child(path[index++])
+    for (let index_ = index; index_ < path.length; index_++) {
+      if (node) node = node.child(path[index_])
+    }
+    return node // can be undefined
+  }
+
+  // selects child based on temp, filter and probability (throws)
+  _selectNext(parent, temporary, tokens, filter) {
+    if (!parent) throw new Error(`no parent:${this._flatten(tokens)}`)
+
+    const children = parent.childNodes({ filter })
+    if (children.length === 0) {
+      if (this.trace)
+        console.log(
+          `No children to select, parent=${parent.token}` +
+            " children=ok[], all=[" +
+            parent.childNodes().map((t) => t.token) +
+            "]"
+        )
+      return
+    }
+
+    // basic case: just prob. select from children
+    if (!this.mlm || this.mlm > tokens.length) {
+      return parent.pselect(filter)
+    }
+
+    const validateMlms = (word, nodes) => {
+      const check = nodes.slice(-this.mlm).map((n) => n.token)
+      check.push(word.token)
+      return !isSubArray(check, this.input)
+    }
+
+    const rand = RiMarkov.parent.randomizer
+    const weights = children.map((n) => n.count)
+    const pdist = rand.ndist(weights, temporary)
+    const tries = children.length * 2
+    const selector = rand.random()
+
+    // loop 2x here as we may skip earlier nodes
+    // but keep track of tries to avoid duplicates
+    const tried = []
+    for (let index = 0, pTotal = 0; index < tries; index++) {
+      const index_ = index % children.length
+      pTotal += pdist[index_]
+      const next = children[index_]
+      if (selector < pTotal && !tried.includes(next.token)) {
+        tried.push(next.token)
+        return validateMlms(next, tokens) ? next : false
+      }
+    }
+  }
+
+  /*
+   * Split string of sentences on sentence-ends, keeping delims
+   * hack: there _must_ be a better way to do thisn
+   */
+  _splitEnds(string_) {
+    const se = [...this.sentenceEnds]
+    const re =
+      "(" +
+      se
+        .reduce((accumulator, w) => `${accumulator + w}|`, "")
+        .slice(0, -1)
+        .replaceAll(/[.*+?^${}()[\]\\]/g, String.raw`\$&`) +
+      ")"
+    const array = []
+    const parts = string_.split(new RegExp(re, "g"))
+    for (const [index, part] of parts.entries()) {
+      if (part.length === 0) continue
+      if (index % 2 === 0) {
+        array.push(part)
+      } else {
+        array[array.length - 1] += part
+      }
+    }
+    return array.map((a) => a.trim())
   }
 
   /**
@@ -63,21 +199,58 @@ class RiMarkov {
     // add new tokens for each sentence start/end
     const allWords = []
     for (let k = 0; k < multiplier; k++) {
-      for (let i = 0; i < sents.length; i++) {
-        const words = this.tokenize(sents[i])
+      for (const sent of sents) {
+        const words = this.tokenize(sent)
         this.sentenceStarts.push(words[0])
-        this.sentenceEnds.add(words[words.length - 1])
+        this.sentenceEnds.add(words.at(-1))
         allWords.push(...words)
       }
       this.treeify(allWords)
     }
 
     if (!this.disableInputChecks || this.mlm) {
-      for (let i = 0; i < allWords.length; i++) {
-        this.input.push(allWords[i])
+      for (const allWord of allWords) {
+        this.input.push(allWord)
       }
     }
     return this
+  }
+
+  /**
+   * Returns array of possible tokens after pre and (optionally) before post. If only one array parameter is provided, this function returns all possible next words, ordered by probability, for the given array.
+   * If two arrays are provided, it returns an unordered list of possible words w that complete the n-gram consisting of: pre[0]...pre[k], w, post[k+1]...post[n].
+   * @param {string[]} pre - the list of tokens preceding the completion
+   * @param {string[]} [post] - the (optional) list of tokens following the completion
+   * @return {string[]} - an unordered list of possible next tokens
+   */
+  completions(pre, post) {
+    let tn
+    const result = []
+    if (post) {
+      // fill the center
+      if (pre.length + post.length > this.n)
+        throw new Error(
+          `Sum of pre.length && post.length must be <= N, was ${pre.length + post.length}`
+        )
+      if (!(tn = this._pathTo(pre))) {
+        if (!RiMarkov.parent.SILENT)
+          console.warn(`Unable to find nodes in pre: ${pre}`)
+        return
+      }
+      const nexts = tn.childNodes()
+      for (const next of nexts) {
+        const atest = [...pre]
+        atest.push(next.token, ...post)
+        if (this._pathTo(atest)) {
+          result.push(next.token)
+        }
+      }
+    } else {
+      // fill the end
+      const pr = this.probabilities(pre)
+      return Object.keys(pr).sort((a, b) => pr[b] - pr[a])
+    }
+    return result
   }
 
   /**
@@ -104,7 +277,7 @@ class RiMarkov {
     let returnsArray = false
     if (typeof count === "number") {
       if (count === 1) {
-        throw Error("For one result, use generate() with no 'count' argument")
+        throw new Error("For one result, use generate() with no 'count' argument")
       }
       returnsArray = true
     }
@@ -114,27 +287,27 @@ class RiMarkov {
       count = 1
     }
 
-    const num = count || 1
+    const number_ = count || 1
     const minLength = options.minLength || 5
     const maxLength = options.maxLength || 35
 
     if (
-      typeof options.temperature !== "undefined" &&
+      options.temperature !== undefined &&
       options.temperature <= 0
     ) {
-      throw Error("Temperature option must be greater than 0")
+      throw new Error("Temperature option must be greater than 0")
     }
 
     let tries = 0
     const tokens = [] //, usedStarts = [];
-    const minIdx = 0
+    const minIndex = 0
     let sentenceIdxs = []
     const markedNodes = []
 
     ////////////////////////// local functions /////////////////////////////
 
     const unmarkNodes = () => {
-      markedNodes.forEach((n) => (n.marked = false))
+      for (const n of markedNodes) (n.marked = false)
     }
 
     const resultCount = () => {
@@ -144,23 +317,23 @@ class RiMarkov {
     const markNode = (node) => {
       if (node) {
         // save current tokens as a sort of hash of current state
-        node.marked = tokens.reduce((acc, e) => acc + e.token, "")
+        node.marked = tokens.reduce((accumulator, e) => accumulator + e.token, "")
         markedNodes.push(node)
       }
     }
 
     const notMarked = (cn) => {
-      const tmap = tokens.reduce((acc, e) => acc + e.token, "")
+      const tmap = tokens.reduce((accumulator, e) => accumulator + e.token, "")
       return cn.marked !== tmap
     }
 
     const validateSentence = (next) => {
       markNode(next)
-      const sentIdx = sentenceIdx()
+      const sentIndex = sentenceIndex()
 
       if (this.trace)
         console.log(
-          1 + (tokens.length - sentIdx),
+          1 + (tokens.length - sentIndex),
           next.token,
           "[" +
             next.parent
@@ -170,7 +343,7 @@ class RiMarkov {
             "]"
         ) // print each child
 
-      const sentence = tokens.slice(sentIdx).map((t) => t.token)
+      const sentence = tokens.slice(sentIndex).map((t) => t.token)
       sentence.push(next.token)
 
       if (sentence.length < minLength) {
@@ -187,7 +360,7 @@ class RiMarkov {
       const flatSent = this.untokenize(sentence)
       if (
         !options.allowDuplicates &&
-        isSubArray(sentence, tokens.slice(0, sentIdx))
+        isSubArray(sentence, tokens.slice(0, sentIndex))
       ) {
         fail(`duplicate (pop: ${next.token})`)
         return false
@@ -198,7 +371,7 @@ class RiMarkov {
 
       if (this.trace)
         console.log(
-          `OK (${resultCount()}/${num}) "` +
+          `OK (${resultCount()}/${number_}) "` +
             flatSent +
             '" sidxs=[' +
             sentenceIdxs +
@@ -208,22 +381,22 @@ class RiMarkov {
       return true
     }
 
-    const fail = (msg, sentence, forceBacktrack) => {
+    const fail = (message, sentence, forceBacktrack) => {
       tries++
-      const sentIdx = sentenceIdx()
-      sentence = sentence || this._flatten(tokens.slice(sentIdx))
+      const sentIndex = sentenceIndex()
+      sentence = sentence || this._flatten(tokens.slice(sentIndex))
       if (tries >= this.maxAttempts) throwError(tries, resultCount())
       //if (tokens.length >= this.maxAttempts) throwError(tries, resultCount()); // ???
       const parent = this._pathTo(tokens)
-      const numChildren =
+      const numberChildren =
         parent ? parent.childNodes({ filter: notMarked }).length : 0
 
       if (this.trace)
         console.log(
           "Fail:",
-          msg,
-          `\n  -> "${sentence}" `,
-          `${tries} tries, ${resultCount()} successes, numChildren=${numChildren}` +
+          message,
+          `\n  -> "${sentence}"`,
+          `${tries} tries, ${resultCount()} successes, numChildren=${numberChildren}` +
             (forceBacktrack ? " forceBacktrack*" : (
               ` parent="${parent.token}` +
               '" goodKids=[' +
@@ -235,7 +408,7 @@ class RiMarkov {
             ))
         )
 
-      if (forceBacktrack || numChildren === 0) {
+      if (forceBacktrack || numberChildren === 0) {
         backtrack()
       }
     }
@@ -246,20 +419,20 @@ class RiMarkov {
     const backtrack = () => {
       let parent
       let tc
-      for (let i = 0; i < 99; i++) {
+      for (let index = 0; index < 99; index++) {
         // tmp-remove?
         const last = tokens.pop()
         markNode(last)
 
         if (this._isEnd(last)) sentenceIdxs.pop()
 
-        let sentIdx = sentenceIdx()
-        const backtrackUntil = Math.max(sentIdx, minIdx)
+        let sentIndex = sentenceIndex()
+        const backtrackUntil = Math.max(sentIndex, minIndex)
 
         if (this.trace)
           console.log(
             `backtrack#${tokens.length}`,
-            `pop "${last.token}" ${tokens.length - sentIdx}` +
+            `pop "${last.token}" ${tokens.length - sentIndex}` +
               "/" +
               backtrackUntil +
               " " +
@@ -270,15 +443,15 @@ class RiMarkov {
         tc = parent.childNodes({ filter: notMarked })
 
         if (tokens.length <= backtrackUntil) {
-          if (minIdx > 0) {
+          if (minIndex > 0) {
             // have seed
-            if (tokens.length <= minIdx) {
+            if (tokens.length <= minIndex) {
               // back at seed
-              if (!tc.length) throw Error("back at barren-seed1: case 0")
+              if (tc.length === 0) throw new Error("back at barren-seed1: case 0")
               if (this.trace) console.log("case 1")
               return true
             }
-            if (tc.length) {
+            if (tc.length > 0) {
               // continue
               if (this.trace) console.log("case 3")
             } else {
@@ -307,7 +480,7 @@ class RiMarkov {
                 sentenceIdxs
               )
 
-            if (!tokens.length) {
+            if (tokens.length === 0) {
               sentenceIdxs = []
               return selectStart()
             }
@@ -316,13 +489,13 @@ class RiMarkov {
           return true
         }
 
-        if (tc.length) {
-          sentIdx = sentenceIdx()
+        if (tc.length > 0) {
+          sentIndex = sentenceIndex()
 
           if (this.trace)
             console.log(
               tokens.length -
-                sentIdx +
+                sentIndex +
                 " " +
                 this._flatten(tokens) +
                 "\n  ok=[" +
@@ -336,20 +509,20 @@ class RiMarkov {
         }
       }
 
-      throw Error(
+      throw new Error(
         "Invalid state in backtrack() [" + tokens.map((t) => t.token) + "]"
       )
     }
 
-    const sentenceIdx = () => {
-      const len = sentenceIdxs.length
-      return len ? sentenceIdxs[len - 1] : 0
+    const sentenceIndex = () => {
+      const length = sentenceIdxs.length
+      return length ? sentenceIdxs[length - 1] : 0
     }
 
     const selectStart = () => {
       let seed = options.seed
 
-      if (seed && seed.length) {
+      if (seed && seed.length > 0) {
         if (typeof seed === "string") seed = this.tokenize(seed)
         let node = this._pathTo(seed, this.root)
         while (!node.isRoot()) {
@@ -360,12 +533,12 @@ class RiMarkov {
       }
 
       // we need a new sentence-start
-      if (!tokens.length || this._isEnd(tokens[tokens.length - 1])) {
+      if (tokens.length === 0 || this._isEnd(tokens.at(-1))) {
         let usableStarts = this.sentenceStarts.filter((ss) =>
           notMarked(this.root.child(ss))
         )
-        if (!usableStarts.length)
-          throw Error("No valid sentence-starts remaining")
+        if (usableStarts.length === 0)
+          throw new Error("No valid sentence-starts remaining")
         const start = RiMarkov.parent.random(usableStarts)
         const startTok = this.root.child(start)
         markNode(startTok)
@@ -375,17 +548,17 @@ class RiMarkov {
         tokens.push(startTok)
         return
       }
-      throw Error(`Invalid call to selectStart: ${this._flatten(tokens)}`)
+      throw new Error(`Invalid call to selectStart: ${this._flatten(tokens)}`)
     }
 
     ////////////////////////////////// code ////////////////////////////////////////
 
     selectStart()
 
-    while (resultCount() < num) {
-      const sentIdx = sentenceIdx()
+    while (resultCount() < number_) {
+      const sentIndex = sentenceIndex()
 
-      if (tokens.length - sentIdx >= maxLength) {
+      if (tokens.length - sentIndex >= maxLength) {
         fail("too-long", 0, true)
         continue
       }
@@ -413,7 +586,7 @@ class RiMarkov {
 
       if (this.trace)
         console.log(
-          tokens.length - sentIdx,
+          tokens.length - sentIndex,
           next.token,
           "[" +
             parent
@@ -426,84 +599,11 @@ class RiMarkov {
 
     unmarkNodes()
 
-    const str = this.untokenize(tokens.map((t) => t.token)).trim()
-    return returnsArray ? this._splitEnds(str) : str
+    const string_ = this.untokenize(tokens.map((t) => t.token)).trim()
+    return returnsArray ? this._splitEnds(string_) : string_
   }
 
-  /**
-   * Converts the model to a JSON-formatted string for storage or serialization
-   * @return {string} - the JSON string
-   */
-  toJSON() {
-    const data = Object.keys(this).reduce(
-      (acc, k) => Object.assign(acc, { [k]: this[k] }),
-      {}
-    )
-    // @ts-ignore
-    data.sentenceEnds = [...data.sentenceEnds] // set -> []
-    return stringify(data)
-  }
-
-  /**
-   * Creates a new model from one previously saved as JSON
-   * @param {string} json - the JSON string to load
-   * @return {RiMarkov} - the RiMarkov instance
-   */
-  static fromJSON(json) {
-    // parse the json and merge with new object
-    const parsed = parse(json)
-    const rm = Object.assign(new RiMarkov(), parsed)
-
-    // convert our json array back to a set
-    rm.sentenceEnds = new Set(...parsed.sentenceEnds)
-
-    // handle json converting undefined [] to empty []
-    if (!parsed.input) rm.input = undefined
-
-    // then recreate the n-gram tree with Node objects
-    const jsonRoot = rm.root
-    populate((rm.root = new Node(null, "ROOT")), jsonRoot)
-
-    return rm
-  }
-
-  /**
-   * Returns array of possible tokens after pre and (optionally) before post. If only one array parameter is provided, this function returns all possible next words, ordered by probability, for the given array.
-   * If two arrays are provided, it returns an unordered list of possible words w that complete the n-gram consisting of: pre[0]...pre[k], w, post[k+1]...post[n].
-   * @param {string[]} pre - the list of tokens preceding the completion
-   * @param {string[]} [post] - the (optional) list of tokens following the completion
-   * @return {string[]} - an unordered list of possible next tokens
-   */
-  completions(pre, post) {
-    let tn
-    const result = []
-    if (post) {
-      // fill the center
-      if (pre.length + post.length > this.n)
-        throw Error(
-          `Sum of pre.length && post.length must be <= N, was ${pre.length + post.length}`
-        )
-      if (!(tn = this._pathTo(pre))) {
-        if (!RiMarkov.parent.SILENT)
-          console.warn(`Unable to find nodes in pre: ${pre}`)
-        return
-      }
-      const nexts = tn.childNodes()
-      for (let i = 0; i < nexts.length; i++) {
-        const atest = pre.slice(0)
-        const next = nexts[i]
-        atest.push(next.token, ...post)
-        if (this._pathTo(atest)) {
-          result.push(next.token)
-        }
-      }
-    } else {
-      // fill the end
-      const pr = this.probabilities(pre)
-      return Object.keys(pr).sort((a, b) => pr[b] - pr[a])
-    }
-    return result
-  }
+  ////////////////////////////// end API ////////////////////////////////
 
   /**
    * Returns the full set of possible next tokens as a object, mapping tokens to probabilities,
@@ -520,7 +620,7 @@ class RiMarkov {
       const children = parent.childNodes()
       const weights = children.map((n) => n.count)
       const pdist = RiMarkov.parent.randomizer.ndist(weights, temperature)
-      children.forEach((c, i) => (probs[c.token] = pdist[i]))
+      for (const [index, c] of children.entries()) (probs[c.token] = pdist[index])
     }
     return probs
   }
@@ -532,23 +632,12 @@ class RiMarkov {
    * @return {number} - the probability of the token or sequence
    */
   probability(data) {
-    if (data && data.length) {
+    if (data && data.length > 0) {
       const tn =
         typeof data === "string" ? this.root.child(data) : this._pathTo(data)
       if (tn) return tn.nodeProb(true) // no meta
     }
     return 0
-  }
-
-  /**
-   * Returns a string representation of the model or a subtree of the model, optionally ordered by probability.
-   * @param {object} root - the root node of the subtree to print
-   * @param {boolean} sort - if true, sort the nodes by probability
-   * @return {string} - the string representation of the model
-   */
-  toString(root, sort) {
-    root = root || this.root
-    return root.asTree(sort).replace(/{}/g, "")
   }
 
   /**
@@ -559,138 +648,47 @@ class RiMarkov {
     return this.root.childCount(true)
   }
 
-  ////////////////////////////// end API ////////////////////////////////
-
-  // selects child based on temp, filter and probability (throws)
-  _selectNext(parent, temp, tokens, filter) {
-    if (!parent) throw Error(`no parent:${this._flatten(tokens)}`)
-
-    const children = parent.childNodes({ filter })
-    if (!children.length) {
-      if (this.trace)
-        console.log(
-          `No children to select, parent=${parent.token}` +
-            " children=ok[], all=[" +
-            parent.childNodes().map((t) => t.token) +
-            "]"
-        )
-      return
-    }
-
-    // basic case: just prob. select from children
-    if (!this.mlm || this.mlm > tokens.length) {
-      return parent.pselect(filter)
-    }
-
-    const validateMlms = (word, nodes) => {
-      const check = nodes.slice(-this.mlm).map((n) => n.token)
-      check.push(word.token)
-      return !isSubArray(check, this.input)
-    }
-
-    const rand = RiMarkov.parent.randomizer
-    const weights = children.map((n) => n.count)
-    const pdist = rand.ndist(weights, temp)
-    const tries = children.length * 2
-    const selector = rand.random()
-
-    // loop 2x here as we may skip earlier nodes
-    // but keep track of tries to avoid duplicates
-    const tried = []
-    for (let i = 0, pTotal = 0; i < tries; i++) {
-      const idx = i % children.length
-      pTotal += pdist[idx]
-      const next = children[idx]
-      if (selector < pTotal && !tried.includes(next.token)) {
-        tried.push(next.token)
-        return validateMlms(next, tokens) ? next : false
-      }
-    }
+  /**
+   * Converts the model to a JSON-formatted string for storage or serialization
+   * @return {string} - the JSON string
+   */
+  toJSON() {
+    const data = Object.fromEntries(Object.keys(this).map(
+      ( k) => [k, this[k]]
+    ))
+    // @ts-ignore
+    data.sentenceEnds = [...data.sentenceEnds] // set -> []
+    return stringify(data)
   }
 
-  /*
-   * Returns true if node (or string) is a sentence end
+  /**
+   * Returns a string representation of the model or a subtree of the model, optionally ordered by probability.
+   * @param {object} root - the root node of the subtree to print
+   * @param {boolean} sort - if true, sort the nodes by probability
+   * @return {string} - the string representation of the model
    */
-  _isEnd(node) {
-    if (node) {
-      let check = node
-      if ("token" in node) check = node.token // needed?
-      return this.sentenceEnds.has(check)
-    }
-    return false
-  }
-
-  /*
-   * Follows 'path' (using only the last n-1 tokens) from root and returns
-   * the node for the last element if it exists, otherwise undefined
-   * @param  {Node[]} path
-   * @param  {node} root of tree to search
-   * @return {node} or undefined
-   */
-  _pathTo(path, root) {
+  toString(root, sort) {
     root = root || this.root
-    if (typeof path === "string") path = [path]
-    if (!path || !path.length || this.n < 2) return root
-    let idx = Math.max(0, path.length - (this.n - 1))
-    let node = root.child(path[idx++])
-    for (let i = idx; i < path.length; i++) {
-      if (node) node = node.child(path[i])
-    }
-    return node // can be undefined
+    return root.asTree(sort).replaceAll('{}', "")
   }
 
   /* add tokens to tree */
   treeify(tokens) {
     const root = this.root
-    for (let i = 0; i < tokens.length; i++) {
+    for (let index = 0; index < tokens.length; index++) {
       let node = root
-      const words = tokens.slice(i, i + this.n)
+      const words = tokens.slice(index, index + this.n)
       let wrap = 0
-      for (let j = 0; j < this.n; j++) {
+      for (let index = 0; index < this.n; index++) {
         let hidden = false
-        if (j >= words.length) {
-          words[j] = tokens[wrap++]
+        if (index >= words.length) {
+          words[index] = tokens[wrap++]
           hidden = true
         }
-        node = node.addChild(words[j])
+        node = node.addChild(words[index])
         if (hidden) node.hidden = true
       }
     }
-  }
-
-  /*
-   * Split string of sentences on sentence-ends, keeping delims
-   * hack: there _must_ be a better way to do thisn
-   */
-  _splitEnds(str) {
-    const se = [...this.sentenceEnds]
-    const re =
-      "(" +
-      se
-        .reduce((acc, w) => `${acc + w}|`, "")
-        .slice(0, -1)
-        .replace(/[.*+?^${}()[\]\\]/g, "\\$&") +
-      ")"
-    const arr = []
-    const parts = str.split(new RegExp(re, "g"))
-    for (let i = 0; i < parts.length; i++) {
-      if (!parts[i].length) continue
-      if (i % 2 === 0) {
-        arr.push(parts[i])
-      } else {
-        arr[arr.length - 1] += parts[i]
-      }
-    }
-    return arr.map((a) => a.trim())
-  }
-
-  /* create a sentence string from an array of nodes */
-  _flatten(nodes) {
-    if (!nodes || (Array.isArray(nodes) && !nodes.length)) return ""
-    if (nodes.token) return nodes.token // single-node
-    const arr = nodes.map((n) => (n ? n.token : "[undef]"))
-    const sent = this.untokenize(arr)
-    return sent.replace(MULTI_SP_RE, " ")
   }
 }
 
@@ -706,64 +704,6 @@ class Node {
     this.hidden = false // hidden
   }
 
-  // Find a (direct) child node with matching token, given a word or node
-  child(word) {
-    let lookup = word
-    if (word.token) lookup = word.token
-    return this.children[lookup]
-  }
-
-  pselect(filter) {
-    const rand = RiMarkov.parent.randomizer
-    const children = this.childNodes({ filter })
-    if (!children.length) {
-      throw Error(
-        `No eligible child for "${this.token}` +
-          '" children=[' +
-          this.childNodes().map((t) => t.token) +
-          "]"
-      )
-    }
-    const weights = children.map((n) => n.count)
-    const pdist = rand.ndist(weights)
-    const idx = rand.pselect(pdist)
-    return children[idx]
-  }
-
-  isLeaf(ignoreHidden) {
-    return this.childCount(ignoreHidden) < 1
-  }
-
-  isRoot() {
-    return !this.parent
-  }
-
-  childNodes(opts) {
-    const sort = opts && opts.sort
-    const filter = opts && opts.filter
-    let kids = Object.values(this.children)
-    if (filter) kids = kids.filter(filter)
-    if (sort)
-      kids.sort((a, b) =>
-        b.count === a.count ? b.token.localeCompare(a.token) : b.count - a.count
-      )
-    return kids
-  }
-
-  childCount(ignoreHidden) {
-    if (this.numChildren === -1) {
-      const opts = {}
-      if (ignoreHidden) opts.filter = (t) => !t.hidden
-      this.numChildren = this.childNodes(opts).reduce((a, c) => a + c.count, 0)
-    }
-    return this.numChildren
-  }
-
-  nodeProb(excludeMetaTags) {
-    if (!this.parent) throw Error("no parent")
-    return this.count / this.parent.childCount(excludeMetaTags)
-  }
-
   // Increments count for a child node and returns it
   addChild(word, count) {
     this.numChildren = -1 // invalidate cache
@@ -777,15 +717,6 @@ class Node {
     return node
   }
 
-  toString() {
-    return this.parent ?
-        `'${this.token}' [${this.count}` +
-          ",p=" +
-          this.nodeProb().toFixed(3) +
-          "]"
-      : "Root"
-  }
-
   asTree(sort, showHiddenNodes) {
     let s = `${this.token} `
     if (this.parent) s += `(${this.count})->`
@@ -794,69 +725,134 @@ class Node {
         stringulate(this, s, 1, sort, !showHiddenNodes)
       : `${s}}`
   }
+
+  // Find a (direct) child node with matching token, given a word or node
+  child(word) {
+    let lookup = word
+    if (word.token) lookup = word.token
+    return this.children[lookup]
+  }
+
+  childCount(ignoreHidden) {
+    if (this.numChildren === -1) {
+      const options = {}
+      if (ignoreHidden) options.filter = (t) => !t.hidden
+      this.numChildren = this.childNodes(options).reduce((a, c) => a + c.count, 0)
+    }
+    return this.numChildren
+  }
+
+  childNodes(options) {
+    const sort = options && options.sort
+    const filter = options && options.filter
+    let kids = Object.values(this.children)
+    if (filter) kids = kids.filter(filter)
+    if (sort)
+      kids.sort((a, b) =>
+        b.count === a.count ? b.token.localeCompare(a.token) : b.count - a.count
+      )
+    return kids
+  }
+
+  isLeaf(ignoreHidden) {
+    return this.childCount(ignoreHidden) < 1
+  }
+
+  isRoot() {
+    return !this.parent
+  }
+
+  nodeProb(excludeMetaTags) {
+    if (!this.parent) throw new Error("no parent")
+    return this.count / this.parent.childCount(excludeMetaTags)
+  }
+
+  pselect(filter) {
+    const rand = RiMarkov.parent.randomizer
+    const children = this.childNodes({ filter })
+    if (children.length === 0) {
+      throw new Error(
+        `No eligible child for "${this.token}` +
+          '" children=[' +
+          this.childNodes().map((t) => t.token) +
+          "]"
+      )
+    }
+    const weights = children.map((n) => n.count)
+    const pdist = rand.ndist(weights)
+    const index = rand.pselect(pdist)
+    return children[index]
+  }
+
+  toString() {
+    return this.parent ?
+        `'${this.token}' [${this.count}` +
+          ",p=" +
+          this.nodeProb().toFixed(3) +
+          "]"
+      : "Root"
+  }
 }
 
 // --------------------------------------------------------------
 
-function stringulate(mn, str, depth, sort, ignoreHidden) {
+function stringulate(mn, string_, depth, sort, ignoreHidden) {
   sort = sort || false
   let indent = "\n"
-  const l = mn.childNodes({ sort: true, filter: (t) => !t.hidden })
-  if (!l.length) return str
-  for (let j = 0; j < depth; j++) indent += "  "
-  for (let i = 0; i < l.length; i++) {
-    const node = l[i]
+  const l = mn.childNodes({ filter: (t) => !t.hidden, sort: true })
+  if (l.length === 0) return string_
+  for (let index = 0; index < depth; index++) indent += "  "
+  for (const node of l) {
     if (node && node.token) {
-      str += `${indent}'${encode(node.token)}'`
+      string_ += `${indent}'${encode(node.token)}'`
       if (!node.isRoot())
-        str += ` [${node.count}` + ",p=" + node.nodeProb().toFixed(3) + "]"
+        string_ += ` [${node.count}` + ",p=" + node.nodeProb().toFixed(3) + "]"
       if (!node.isLeaf(ignoreHidden)) {
         //console.log('appending "{" for '+node.token, node.childNodes());
-        str += "  {"
+        string_ += "  {"
       }
-      str =
+      string_ =
         mn.childCount(ignoreHidden) ?
-          stringulate(node, str, depth + 1, sort)
-        : `${str}}`
+          stringulate(node, string_, depth + 1, sort)
+        : `${string_}}`
     }
   }
   indent = "\n"
-  for (let j = 0; j < depth - 1; j++) indent += "  "
-  return `${str + indent}}`
+  for (let index = 0; index < depth - 1; index++) indent += "  "
+  return `${string_ + indent}}`
 }
 
 function encode(tok) {
-  if (tok === "\n") tok = "\\n"
-  if (tok === "\r") tok = "\\r"
-  if (tok === "\t") tok = "\\t"
-  if (tok === "\r\n") return "\\r\\n"
+  if (tok === "\n") tok = String.raw`\n`
+  if (tok === "\r") tok = String.raw`\r`
+  if (tok === "\t") tok = String.raw`\t`
+  if (tok === "\r\n") return String.raw`\r\n`
   return tok
 }
 
-function populate(objNode, jsonNode) {
+function populate(objectNode, jsonNode) {
   if (!jsonNode) return
   const children = Object.values(jsonNode.children)
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i]
-    const newNode = objNode.addChild(child.token, child.count)
+  for (const child of children) {
+    const newNode = objectNode.addChild(child.token, child.count)
     populate(newNode, child) // recurse
   }
 }
 
 function throwError(tries, oks) {
-  throw Error(
+  throw new Error(
     `Failed after ${tries} tries` +
       (oks ? ` and ${oks} successes` : "") +
       ", you may need to adjust options or add more text"
   )
 }
 
-function isSubArray(find, arr) {
-  if (!arr || !arr.length) return false
-  OUT: for (let i = find.length - 1; i < arr.length; i++) {
-    for (let j = 0; j < find.length; j++) {
-      if (find[find.length - j - 1] !== arr[i - j]) continue OUT
-      if (j === find.length - 1) return true
+function isSubArray(find, array) {
+  if (!array || array.length === 0) return false
+  OUT: for (let index = find.length - 1; index < array.length; index++) {
+    for (let index_ = 0; index_ < find.length; index_++) {
+      if (find[find.length - index_ - 1] !== array[index - index_]) continue OUT
+      if (index_ === find.length - 1) return true
     }
   }
   return false
