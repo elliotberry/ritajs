@@ -1,46 +1,22 @@
 {
-  "name": "rita",
-  "version": "3.1.3",
+  "name": "@elliot/rita",
+  "version": "300.1.3",
   "author": "Daniel C Howe",
   "description": "tools for generative natural language",
-  "homepage": "https://rednoise.org/rita",
   "license": "GPL-3.0",
   "type": "module",
   "scripts": {
     "test": "NODE_ENV=dev npx mocha",
     "test:dist": "NODE_ENV=dev npx mocha test/dist",
     "build": "rm -rf dist/ && node ./node_modules/tsup/dist/cli-default.js && cp types/rita.d.* dist/",
-    "types": "npx tsc",
-    "pub": "./npnb/source/cli.js --no-release-draft --test-script test:dist patch",
     "prepub": "npm version patch && npm run build"
   },
   "main": "./src/rita.js",
-  "types": "dist/rita.d.ts",
-  "browser": "./dist/rita.min.js",
-  "exports": {
-    ".": {
-      "import": "./dist/rita.js",
-      "require": "./dist/rita.cjs"
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/dhowe/ritajs.git"
-  },
+
   "engines": {
     "node": ">=14.0"
   },
-  "keywords": [
-    "natural language",
-    "generative text",
-    "text analysis"
-  ],
-  "bugs": {
-    "url": "https://github.com/dhowe/ritajs/issues"
-  },
+ 
   "devDependencies": {
     "@stylistic/eslint-plugin-js": "^4.2.0",
     "@types/chai": "^5.2.1",
