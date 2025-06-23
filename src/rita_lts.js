@@ -1,4 +1,4 @@
-import Util from "./util.js"
+import Utility from "./util.js"
 
 /**
  * Provides the phone list for words using the CMU6 letter-to-sound (LTS) rules,
@@ -18,58 +18,24 @@ class LetterToSound {
     this.stateMachine = null
     this.warnedForNoLTS = false
     this.tokenizer = new LtsTokenizer()
-    LetterToSound.RULES.forEach((r) => this.parseAndAdd(r))
+    for (const r of LetterToSound.RULES) this.parseAndAdd(r)
   }
 
-  createState(type) {
-    if (type === "S") {
-      const index = parseInt(this.tokenizer.nextToken())
-      const c = this.tokenizer.nextToken()
-      const qtrue = parseInt(this.tokenizer.nextToken())
-      const qfalse = parseInt(this.tokenizer.nextToken())
-      return new DecisionState(index, c.charAt(0), qtrue, qfalse)
-    } else if (type === "P") {
-      return new FinalState(this.tokenizer.nextToken())
-    }
-    throw Error(`Unexpected type: ${type}`)
-  }
-
-  // Creates a word from an input line and adds it to the state machine
-  parseAndAdd(line) {
-    this.tokenizer.tokenize(line, " ")
-    const type = this.tokenizer.nextToken()
-    if (type === "S" || type === "P") {
-      this.stateMachine[this.numStates++] = this.createState(
-        type /*, this.tokenizer*/
-      )
-    } else if (type === "I") {
-      const index = parseInt(this.tokenizer.nextToken())
-      if (index == this.numStates) {
-        this.letterIndex[this.tokenizer.nextToken()] = index
-      } else {
-        throw Error("Bad index in file.")
-      }
-    } else if (type == "T") {
-      this.stateMachine = []
-      this.stateMachineSize = parseInt(this.tokenizer.nextToken())
-    }
-  }
-
-  buildPhones(word, opts) {
+  buildPhones(word, options) {
     const RiTa = this.RiTa
 
-    if (!word || !word.length || RiTa.isPunct(word)) return
+    if (!word || word.length === 0 || RiTa.isPunct(word)) return
 
     const phoneList = []
     const windowSize = 4
     let fullBuff
-    let tmp
+    let temporary
     let currentState
     let startIndex
     let stateIndex
     let c
 
-    const silent = RiTa.SILENT || RiTa.SILENCE_LTS || (opts && opts.silent)
+    const silent = RiTa.SILENT || RiTa.SILENCE_LTS || (options && options.silent)
     if (!LetterToSound.RULES) {
       if (!this.warnedForNoLTS) {
         this.warnedForNoLTS = true
@@ -84,13 +50,13 @@ class LetterToSound {
 
     word = word.toLowerCase()
 
-    if (Util.isNum(word) && /^[0-9]+$/.test(word)) {
+    if (Utility.isNum(word) && /^[0-9]+$/.test(word)) {
       //if (RiTa.HAS_LEXICON) {
       word = word.length > 1 ? word.split("") : [word]
-      for (let k = 0; k < word.length; k++) {
-        const asWord = Util.Numbers.toWords[parseInt(word[k])]
+      for (const element of word) {
+        const asWord = Utility.Numbers.toWords[Number.parseInt(element)]
         let phs = RiTa.lexicon.rawPhones(asWord, { noLts: true })
-        phs = phs.replace(/1/g, "").replace(/ /g, "-")
+        phs = phs.replaceAll('1', "").replaceAll(' ', "-")
         phoneList.push(...phs.split("-"))
       }
       return phoneList
@@ -98,26 +64,26 @@ class LetterToSound {
     }
 
     // Create "000#word#000", uggh
-    ;(tmp = `000#${word.trim()}#000`), (fullBuff = tmp.split(""))
+    ;(temporary = `000#${word.trim()}#000`), (fullBuff = temporary.split(""))
 
     for (let pos = 0; pos < word.length; pos++) {
-      for (let i = 0; i < windowSize; i++) {
-        this.fval_buff[i] = fullBuff[pos + i]
-        this.fval_buff[i + windowSize] = fullBuff[i + pos + 1 + windowSize]
+      for (let index = 0; index < windowSize; index++) {
+        this.fval_buff[index] = fullBuff[pos + index]
+        this.fval_buff[index + windowSize] = fullBuff[index + pos + 1 + windowSize]
       }
 
       c = word[pos]
       if (c == "'") continue
       startIndex = this.letterIndex[c]
 
-      if (isNaN(parseFloat(startIndex)) || !isFinite(startIndex)) {
+      if (isNaN(Number.parseFloat(startIndex)) || !isFinite(startIndex)) {
         // isNum
         if (!silent) {
           console.warn(
             `Unable to generate LTS for '${word}', no index for '` +
               c +
               "', isDigit=" +
-              Util.isNum(c) +
+              Utility.isNum(c) +
               ", isPunct=" +
               RiTa.isPunct(c)
           )
@@ -125,7 +91,7 @@ class LetterToSound {
         return
       }
 
-      stateIndex = parseInt(startIndex)
+      stateIndex = Number.parseInt(startIndex)
       currentState = this.getState(stateIndex)
       while (!(currentState instanceof FinalState)) {
         stateIndex = currentState.getNextState(this.fval_buff)
@@ -136,14 +102,48 @@ class LetterToSound {
     return phoneList
   }
 
-  getState(i) {
-    if (typeof i === "number") {
-      return this.stateMachine[i] === " " ?
-          this.getState(this.stateMachine[i])
-        : this.stateMachine[i]
+  createState(type) {
+    if (type === "S") {
+      const index = Number.parseInt(this.tokenizer.nextToken())
+      const c = this.tokenizer.nextToken()
+      const qtrue = Number.parseInt(this.tokenizer.nextToken())
+      const qfalse = Number.parseInt(this.tokenizer.nextToken())
+      return new DecisionState(index, c.charAt(0), qtrue, qfalse)
+    } else if (type === "P") {
+      return new FinalState(this.tokenizer.nextToken())
+    }
+    throw new Error(`Unexpected type: ${type}`)
+  }
+
+  getState(index) {
+    if (typeof index === "number") {
+      return this.stateMachine[index] === " " ?
+          this.getState(this.stateMachine[index])
+        : this.stateMachine[index]
     } else {
-      this.tokenizer.tokenize(i)
+      this.tokenizer.tokenize(index)
       return this.getState(this.tokenizer.nextToken()) //, this.tokenizer);
+    }
+  }
+
+  // Creates a word from an input line and adds it to the state machine
+  parseAndAdd(line) {
+    this.tokenizer.tokenize(line, " ")
+    const type = this.tokenizer.nextToken()
+    if (type === "S" || type === "P") {
+      this.stateMachine[this.numStates++] = this.createState(
+        type /*, this.tokenizer*/
+      )
+    } else if (type === "I") {
+      const index = Number.parseInt(this.tokenizer.nextToken())
+      if (index == this.numStates) {
+        this.letterIndex[this.tokenizer.nextToken()] = index
+      } else {
+        throw new Error("Bad index in file.")
+      }
+    } else if (type == "T") {
+      this.stateMachine = []
+      this.stateMachineSize = Number.parseInt(this.tokenizer.nextToken())
     }
   }
 }
@@ -152,12 +152,12 @@ class LetterToSound {
 
 /**  @memberof module:rita */
 class LtsTokenizer {
-  tokenize(str, delim) {
-    this.idx = 0
-    this.tokens = str.split(delim || " ")
-  }
   nextToken() {
     return this.idx < this.tokens.length ? this.tokens[this.idx++] : null
+  }
+  tokenize(string_, delim) {
+    this.idx = 0
+    this.tokens = string_.split(delim || " ")
   }
 }
 
@@ -184,12 +184,12 @@ class FinalState {
       if (Array.isArray(phones)) {
         this.phoneList = phones
       } else {
-        const i = phones.indexOf("-")
-        if (i == -1) {
+        const index = phones.indexOf("-")
+        if (index == -1) {
           this.phoneList[0] = phones
         } else {
-          this.phoneList[0] = phones.substring(0, i)
-          this.phoneList[1] = phones.substring(i + 1)
+          this.phoneList[0] = phones.slice(0, Math.max(0, index))
+          this.phoneList[1] = phones.slice(Math.max(0, index + 1))
         }
       }
     }
@@ -197,8 +197,8 @@ class FinalState {
 
   append(array) {
     if (!this.phoneList) return
-    for (let i = 0; i < this.phoneList.length; i++)
-      array.push(this.phoneList[i])
+    for (let index = 0; index < this.phoneList.length; index++)
+      array.push(this.phoneList[index])
   }
 }
 FinalState.TYPE = 2

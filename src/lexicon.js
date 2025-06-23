@@ -241,7 +241,6 @@ class Lexicon {
     if (opts.shuffle) words = this.RiTa.randomizer.shuffle(words)
 
     const result = []
-    //console.time('search: '+pattern);
     for (let i = 0; i < words.length; i++) {
       let word = words[i]
       let data = this.data[word]
@@ -260,7 +259,6 @@ class Lexicon {
         if (result.length === opts.limit) break
       }
     }
-    //console.timeEnd('search: '+pattern);
 
     return result
   }
