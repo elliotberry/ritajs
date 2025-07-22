@@ -11,6 +11,19 @@ class Lexicon {
     this.data = custom || dict
     this.analyzer = parent.analyzer
     this.lexWarned = false
+
+    // Build first-phone index for alliterations (using first phone of first stressed syllable)
+    this._firstPhoneIndex = {}
+    for (const word in this.data) {
+      const rawPhones = this.data[word][0]
+      // Use the same logic as alliterationsSync: get first stressed syllable, then its first phone
+      let firstStressedSyl = this._firstStressedSylFromRaw(rawPhones)
+      let firstPhone = this._firstPhone(firstStressedSyl)
+      if (firstPhone) {
+        if (!this._firstPhoneIndex[firstPhone]) this._firstPhoneIndex[firstPhone] = []
+        this._firstPhoneIndex[firstPhone].push(word)
+      }
+    }
   }
 
   hasWord(word, opts = {}) {
@@ -67,43 +80,56 @@ class Lexicon {
     if (!fss) return []
 
     const phone = this._firstPhone(fss)
-    let words = Object.keys(dict)
-
-    // make sure we parsed first phoneme
     if (!phone) {
       if (!opts.silent && !this.RiTa.SILENT)
         console.warn(`Failed parsing first phone in "${theWord}"`)
       return []
     }
 
-    // randomize list order if shuffle is true
+    // Use the first-phone index for candidate words
+    let words = this._firstPhoneIndex[phone] ? [...this._firstPhoneIndex[phone]] : []
     if (opts.shuffle) words = this.RiTa.randomizer.shuffle(words)
 
-    const result = []
+    let result = []
     for (let i = 0; i < words.length; i++) {
       let word = words[i]
-      // check word length and syllables
       if (word === theWord || !this._checkCriteria(word, dict[word], opts)) {
         continue
       }
-
       let data = dict[word]
       if (opts.targetPos) {
         word = this._matchPos(word, data, opts)
         if (!word) continue
-        // Note: we may have changed the word here (e.g. via conjugation)
-        //       and it is also may no longer be in the dictionary
         if (word !== words[i]) data = dict[word]
       }
-
-      // TODO: use 'data' here unless we've changed
-      // to a new word not in dict
-      const c2 = this._firstPhone(this._firstStressedSyl(word))
-      if (phone === c2) result.push(word)
-
+      // Hybrid: dynamically check first phone of first stressed syllable
+      let candidateFss = this._firstStressedSylFromRaw(data ? data[0] : this.rawPhones(word))
+      let candidatePhone = this._firstPhone(candidateFss)
+      if (candidatePhone !== phone) continue
+      result.push(word)
       if (result.length === opts.limit) break
     }
-
+    // Fallback: if result is empty, do a full scan for correctness
+    if (result.length === 0) {
+      words = Object.keys(dict)
+      for (let i = 0; i < words.length; i++) {
+        let word = words[i]
+        if (word === theWord || !this._checkCriteria(word, dict[word], opts)) {
+          continue
+        }
+        let data = dict[word]
+        if (opts.targetPos) {
+          word = this._matchPos(word, data, opts)
+          if (!word) continue
+          if (word !== words[i]) data = dict[word]
+        }
+        let candidateFss = this._firstStressedSylFromRaw(data ? data[0] : this.rawPhones(word))
+        let candidatePhone = this._firstPhone(candidateFss)
+        if (candidatePhone !== phone) continue
+        result.push(word)
+        if (result.length === opts.limit) break
+      }
+    }
     return result
   }
 
@@ -699,6 +725,26 @@ class Lexicon {
   _lookupRaw(word, fatal) {
     word = word && word.toLowerCase()
     return this.data[word]
+  }
+
+  // Helper for index: get first stressed syllable from raw phones string
+  _firstStressedSylFromRaw(raw) {
+    if (raw) {
+      let idx = raw.indexOf(this.RiTa.STRESS)
+      if (idx >= 0) {
+        let c = raw.charAt(--idx)
+        while (c != " ") {
+          if (--idx < 0) {
+            idx = 0
+            break
+          }
+          c = raw.charAt(idx)
+        }
+        const firstToEnd = idx === 0 ? raw : raw.substring(idx).trim()
+        idx = firstToEnd.indexOf(" ")
+        return idx < 0 ? firstToEnd : firstToEnd.substring(0, idx)
+      }
+    }
   }
 }
 
